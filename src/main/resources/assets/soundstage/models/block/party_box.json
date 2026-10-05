@@ -1,0 +1,191 @@
+{
+    "__comment": "Karaoke-style party box. The cabinet is split into a full-height front baffle and a lower rear body, leaving a recessed control shelf behind the baffle for the knobs and mic cradles. The baffle's north face is deliberately still exactly 12x16 — party_box_front.png is generated with aspect pre-distortion for that face, and there is no generator script in the repo, so changing the face's proportions would invalidate the texture.",
+    "parent": "block/block",
+    "textures": {
+        "particle": "soundstage:block/speaker_casing",
+        "body": "soundstage:block/speaker_casing",
+        "front": "soundstage:block/party_box_front",
+        "deck": "soundstage:block/party_box_deck",
+        "knob": "soundstage:block/party_box_knob",
+        "mic": "soundstage:block/party_box_mic"
+    },
+    "elements": [
+        {
+            "__comment": "Front baffle — carries the drivers and the LED ring. Face must stay 12 wide x 16 tall.",
+            "from": [2, 0, 2],
+            "to": [14, 16, 6],
+            "faces": {
+                "north": { "uv": [0, 0, 16, 16], "texture": "#front" },
+                "south": { "uv": [2, 0, 14, 16], "texture": "#body" },
+                "east":  { "uv": [2, 0, 6, 16], "texture": "#body" },
+                "west":  { "uv": [2, 0, 6, 16], "texture": "#body" },
+                "up":    { "uv": [2, 2, 14, 6], "texture": "#body" },
+                "down":  { "uv": [2, 2, 14, 6], "texture": "#body" }
+            }
+        },
+        {
+            "__comment": "Rear body. Its top face at y=14 is the control shelf floor.",
+            "from": [2, 0, 6],
+            "to": [14, 14, 14],
+            "faces": {
+                "north": { "uv": [2, 2, 14, 16], "texture": "#body" },
+                "south": { "uv": [2, 2, 14, 16], "texture": "#body" },
+                "east":  { "uv": [6, 2, 14, 16], "texture": "#body" },
+                "west":  { "uv": [6, 2, 14, 16], "texture": "#body" },
+                "up":    { "uv": [2, 4, 14, 12], "texture": "#deck" },
+                "down":  { "uv": [2, 6, 14, 14], "texture": "#body" }
+            }
+        },
+        {
+            "__comment": "Control knobs, three across the front of the shelf.",
+            "from": [4, 14, 6.4],
+            "to": [6, 15.5, 8.4],
+            "faces": {
+                "north": { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "south": { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "east":  { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "west":  { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "up":    { "uv": [0, 0, 16, 16], "texture": "#knob" }
+            }
+        },
+        {
+            "from": [7, 14, 6.4],
+            "to": [9, 15.5, 8.4],
+            "faces": {
+                "north": { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "south": { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "east":  { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "west":  { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "up":    { "uv": [0, 0, 16, 16], "texture": "#knob" }
+            }
+        },
+        {
+            "from": [10, 14, 6.4],
+            "to": [12, 15.5, 8.4],
+            "faces": {
+                "north": { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "south": { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "east":  { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "west":  { "uv": [0, 0, 16, 12], "texture": "#knob" },
+                "up":    { "uv": [0, 0, 16, 16], "texture": "#knob" }
+            }
+        },
+        {
+            "__comment": "Left cradle saddles.",
+            "from": [3, 14, 10.5],
+            "to": [6, 15.4, 11.2],
+            "faces": {
+                "north": { "uv": [0, 0, 12, 6], "texture": "#deck" },
+                "south": { "uv": [0, 0, 12, 6], "texture": "#deck" },
+                "east":  { "uv": [0, 0, 3, 6], "texture": "#deck" },
+                "west":  { "uv": [0, 0, 3, 6], "texture": "#deck" },
+                "up":    { "uv": [0, 0, 12, 3], "texture": "#deck" }
+            }
+        },
+        {
+            "from": [3, 14, 12.7],
+            "to": [6, 15.4, 13.5],
+            "faces": {
+                "north": { "uv": [0, 0, 12, 6], "texture": "#deck" },
+                "south": { "uv": [0, 0, 12, 6], "texture": "#deck" },
+                "east":  { "uv": [0, 0, 3, 6], "texture": "#deck" },
+                "west":  { "uv": [0, 0, 3, 6], "texture": "#deck" },
+                "up":    { "uv": [0, 0, 12, 3], "texture": "#deck" }
+            }
+        },
+        {
+            "__comment": "Left mic — barrel lying front-to-back in the cradles, ball head toward the front.",
+            "from": [3.6, 14.5, 10.2],
+            "to": [5.4, 15.7, 13.6],
+            "faces": {
+                "north": { "uv": [0, 9, 8, 15], "texture": "#mic" },
+                "south": { "uv": [0, 9, 8, 15], "texture": "#mic" },
+                "east":  { "uv": [0, 9, 16, 15], "texture": "#mic" },
+                "west":  { "uv": [0, 9, 16, 15], "texture": "#mic" },
+                "up":    { "uv": [0, 9, 8, 16], "texture": "#mic" },
+                "down":  { "uv": [0, 9, 8, 16], "texture": "#mic" }
+            }
+        },
+        {
+            "from": [3.35, 14.4, 8.8],
+            "to": [5.65, 15.9, 10.2],
+            "faces": {
+                "north": { "uv": [0, 0, 10, 8], "texture": "#mic" },
+                "east":  { "uv": [0, 0, 8, 8], "texture": "#mic" },
+                "west":  { "uv": [0, 0, 8, 8], "texture": "#mic" },
+                "up":    { "uv": [0, 0, 10, 8], "texture": "#mic" },
+                "down":  { "uv": [0, 0, 10, 8], "texture": "#mic" }
+            }
+        },
+        {
+            "__comment": "Right cradle saddles.",
+            "from": [10, 14, 10.5],
+            "to": [13, 15.4, 11.2],
+            "faces": {
+                "north": { "uv": [0, 0, 12, 6], "texture": "#deck" },
+                "south": { "uv": [0, 0, 12, 6], "texture": "#deck" },
+                "east":  { "uv": [0, 0, 3, 6], "texture": "#deck" },
+                "west":  { "uv": [0, 0, 3, 6], "texture": "#deck" },
+                "up":    { "uv": [0, 0, 12, 3], "texture": "#deck" }
+            }
+        },
+        {
+            "from": [10, 14, 12.7],
+            "to": [13, 15.4, 13.5],
+            "faces": {
+                "north": { "uv": [0, 0, 12, 6], "texture": "#deck" },
+                "south": { "uv": [0, 0, 12, 6], "texture": "#deck" },
+                "east":  { "uv": [0, 0, 3, 6], "texture": "#deck" },
+                "west":  { "uv": [0, 0, 3, 6], "texture": "#deck" },
+                "up":    { "uv": [0, 0, 12, 3], "texture": "#deck" }
+            }
+        },
+        {
+            "__comment": "Right mic.",
+            "from": [10.6, 14.5, 10.2],
+            "to": [12.4, 15.7, 13.6],
+            "faces": {
+                "north": { "uv": [0, 9, 8, 15], "texture": "#mic" },
+                "south": { "uv": [0, 9, 8, 15], "texture": "#mic" },
+                "east":  { "uv": [0, 9, 16, 15], "texture": "#mic" },
+                "west":  { "uv": [0, 9, 16, 15], "texture": "#mic" },
+                "up":    { "uv": [0, 9, 8, 16], "texture": "#mic" },
+                "down":  { "uv": [0, 9, 8, 16], "texture": "#mic" }
+            }
+        },
+        {
+            "from": [10.35, 14.4, 8.8],
+            "to": [12.65, 15.9, 10.2],
+            "faces": {
+                "north": { "uv": [0, 0, 10, 8], "texture": "#mic" },
+                "east":  { "uv": [0, 0, 8, 8], "texture": "#mic" },
+                "west":  { "uv": [0, 0, 8, 8], "texture": "#mic" },
+                "up":    { "uv": [0, 0, 10, 8], "texture": "#mic" },
+                "down":  { "uv": [0, 0, 10, 8], "texture": "#mic" }
+            }
+        },
+        {
+            "__comment": "Side grip handles. Standing proud of the cabinet sides rather than cut into the top, so the shelf stays clear and nothing leaves the block.",
+            "from": [1, 11.5, 7],
+            "to": [2, 13, 11],
+            "faces": {
+                "north": { "uv": [0, 0, 4, 6], "texture": "#deck" },
+                "south": { "uv": [0, 0, 4, 6], "texture": "#deck" },
+                "west":  { "uv": [0, 0, 16, 6], "texture": "#deck" },
+                "up":    { "uv": [0, 0, 4, 16], "texture": "#deck" },
+                "down":  { "uv": [0, 0, 4, 16], "texture": "#deck" }
+            }
+        },
+        {
+            "from": [14, 11.5, 7],
+            "to": [15, 13, 11],
+            "faces": {
+                "north": { "uv": [0, 0, 4, 6], "texture": "#deck" },
+                "south": { "uv": [0, 0, 4, 6], "texture": "#deck" },
+                "east":  { "uv": [0, 0, 16, 6], "texture": "#deck" },
+                "up":    { "uv": [0, 0, 4, 16], "texture": "#deck" },
+                "down":  { "uv": [0, 0, 4, 16], "texture": "#deck" }
+            }
+        }
+    ]
+}

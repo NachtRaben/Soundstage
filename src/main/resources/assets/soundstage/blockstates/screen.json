@@ -1,0 +1,9 @@
+{
+  "__comment": "A future ScreenBlockEntityRenderer will read FACING and rotate the model itself, exactly as ReceiverBlockEntityRenderer already does for the receiver's ROTATION - see ReceiverBlock's own blockstate comment for the same trap. These 'y' values exist to satisfy every state combination having a model, not because anything currently draws from them: ScreenBlock.getRenderShape is ENTITYBLOCK_ANIMATED, and until that renderer exists a placed screen draws nothing at all.",
+  "variants": {
+    "facing=north": { "model": "soundstage:block/screen" },
+    "facing=south": { "model": "soundstage:block/screen", "y": 180 },
+    "facing=west":  { "model": "soundstage:block/screen", "y": 270 },
+    "facing=east":  { "model": "soundstage:block/screen", "y": 90 }
+  }
+}

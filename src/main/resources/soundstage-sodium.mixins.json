@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "package": "com.nachtraben.soundstage.mixin.client",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "SodiumRebuildMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

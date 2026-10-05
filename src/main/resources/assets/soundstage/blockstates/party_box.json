@@ -1,0 +1,132 @@
+{
+    "variants": {
+        "rotation=0,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 0
+        },
+        "rotation=0,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 0
+        },
+        "rotation=1,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 0
+        },
+        "rotation=1,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 0
+        },
+        "rotation=2,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 90
+        },
+        "rotation=2,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 90
+        },
+        "rotation=3,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 90
+        },
+        "rotation=3,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 90
+        },
+        "rotation=4,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 90
+        },
+        "rotation=4,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 90
+        },
+        "rotation=5,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 90
+        },
+        "rotation=5,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 90
+        },
+        "rotation=6,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 180
+        },
+        "rotation=6,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 180
+        },
+        "rotation=7,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 180
+        },
+        "rotation=7,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 180
+        },
+        "rotation=8,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 180
+        },
+        "rotation=8,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 180
+        },
+        "rotation=9,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 180
+        },
+        "rotation=9,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 180
+        },
+        "rotation=10,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 270
+        },
+        "rotation=10,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 270
+        },
+        "rotation=11,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 270
+        },
+        "rotation=11,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 270
+        },
+        "rotation=12,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 270
+        },
+        "rotation=12,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 270
+        },
+        "rotation=13,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 270
+        },
+        "rotation=13,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 270
+        },
+        "rotation=14,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 0
+        },
+        "rotation=14,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 0
+        },
+        "rotation=15,grille=true": {
+            "model": "soundstage:block/party_box",
+            "y": 0
+        },
+        "rotation=15,grille=false": {
+            "model": "soundstage:block/party_box",
+            "y": 0
+        }
+    }
+}

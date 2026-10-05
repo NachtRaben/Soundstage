@@ -1,0 +1,5 @@
+JSON-java (org.json:json:20240303) is released into the public domain.
+
+The iharder Base64 library (net.iharder:base64:2.3.9) is released into the
+public domain by Robert Harder. The upstream statement is: "I am placing this
+code in the Public Domain. Do with it as you will."

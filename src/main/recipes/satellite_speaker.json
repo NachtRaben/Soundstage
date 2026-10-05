@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "key": {
+    "P": "#minecraft:planks",
+    "N": "minecraft:note_block"
+  },
+  "pattern": [
+    "PPP",
+    "PNP"
+  ],
+  "result": { "count": 2, "id": "soundstage:satellite_speaker" }
+}

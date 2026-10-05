@@ -1,0 +1,28 @@
+[versions]
+lombok = "1.18.46"
+
+slf4j = "2.0.9"
+
+commons-io = "2.15.1"
+
+junit = "5.11.4"
+
+jcodec = "0.2.5"
+
+xz = "1.12"
+
+mixinextras = "0.5.5"
+
+[libraries]
+armalib-lavaplayer = { module = "dev.armadeus:armalib-lavaplayer" }
+armalib-lavaplayer-youtube = { module = "dev.armadeus:armalib-lavaplayer-youtube" }
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+commons-io = { module = "commons-io:commons-io", version.ref = "commons-io" }
+jcodec = { module = "org.jcodec:jcodec", version.ref = "jcodec" }
+xz = { module = "org.tukaani:xz", version.ref = "xz" }
+mixinextras-common = { module = "io.github.llamalad7:mixinextras-common", version.ref = "mixinextras" }
+mixinextras-forge = { module = "io.github.llamalad7:mixinextras-forge", version.ref = "mixinextras" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }

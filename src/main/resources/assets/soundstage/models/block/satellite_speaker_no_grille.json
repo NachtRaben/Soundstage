@@ -1,0 +1,90 @@
+{
+    "parent": "block/block",
+    "textures": {
+        "0": "minecraft:block/gray_wool",
+        "1": "soundstage:block/satellite_front",
+        "2": "minecraft:block/black_concrete",
+        "casing": "minecraft:block/stripped_dark_oak_log",
+        "particle": "minecraft:block/stripped_dark_oak_log"
+    },
+    "elements": [
+        {
+            "name": "mainBox",
+            "from": [
+                4,
+                0,
+                4
+            ],
+            "to": [
+                12,
+                12,
+                14
+            ],
+            "rotation": {
+                "angle": 0,
+                "axis": "y",
+                "origin": [
+                    8,
+                    4,
+                    9
+                ]
+            },
+            "faces": {
+                "north": {
+                    "uv": [
+                        0,
+                        0,
+                        16,
+                        16
+                    ],
+                    "texture": "#1"
+                },
+                "east": {
+                    "uv": [
+                        0,
+                        8,
+                        5,
+                        16
+                    ],
+                    "texture": "#casing"
+                },
+                "south": {
+                    "uv": [
+                        7,
+                        0,
+                        14,
+                        8
+                    ],
+                    "texture": "#casing"
+                },
+                "west": {
+                    "uv": [
+                        0,
+                        8,
+                        5,
+                        16
+                    ],
+                    "texture": "#casing"
+                },
+                "up": {
+                    "uv": [
+                        12,
+                        13,
+                        5,
+                        8
+                    ],
+                    "texture": "#casing"
+                },
+                "down": {
+                    "uv": [
+                        12,
+                        8,
+                        5,
+                        13
+                    ],
+                    "texture": "#casing"
+                }
+            }
+        }
+    ]
+}

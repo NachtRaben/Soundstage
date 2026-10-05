@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "key": {
+    "P": "#minecraft:planks",
+    "N": "minecraft:note_block",
+    "I": "minecraft:iron_block"
+  },
+  "pattern": [
+    "PPP",
+    "PNP",
+    "PIP"
+  ],
+  "result": { "count": 1, "id": "soundstage:subwoofer" }
+}

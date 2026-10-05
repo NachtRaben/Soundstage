@@ -1,0 +1,22 @@
+{
+  "__comment": "Plain black_concrete, not a mod-owned texture: this task builds only the block, not what is drawn on its face. A flat panel two units thick, flush against whatever is behind it - see ScreenBlock.NORTH_SHAPE for the matching collision box.",
+  "parent": "block/block",
+  "textures": {
+    "particle": "minecraft:block/black_concrete",
+    "all": "minecraft:block/black_concrete"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 14],
+      "to": [16, 16, 16],
+      "faces": {
+        "north": { "uv": [0, 0, 16, 16], "texture": "#all" },
+        "east":  { "uv": [0, 0, 2, 16], "texture": "#all" },
+        "south": { "uv": [0, 0, 16, 16], "texture": "#all" },
+        "west":  { "uv": [0, 0, 2, 16], "texture": "#all" },
+        "up":    { "uv": [0, 0, 16, 2], "texture": "#all" },
+        "down":  { "uv": [0, 0, 16, 2], "texture": "#all" }
+      }
+    }
+  ]
+}

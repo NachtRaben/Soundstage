@@ -1,0 +1,216 @@
+{
+  "__comment": "Glass envelopes ONLY, split out of receiver.json so they can be drawn on a render type that does not write depth - see SoundstageRenderTypes.glass. Glass that writes depth stamps itself into the depth buffer and then hides the filament glowing inside it. Every envelope is TWO nested boxes: vanilla models are single-sided, so the inner shell is what makes the glass visible from inside.",
+  "textures": {
+    "tube": "soundstage:block/receiver_tube"
+  },
+  "elements": [
+    {
+      "__comment": "Tube 1 envelope, outer surface.",
+      "from": [2.75, 7, 6.75],
+      "to": [5.25, 11.4, 9.25],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 1 envelope, INNER surface - a shell 0.02 inside the outer one. A vanilla block model emits outward-facing quads only, so from inside the bottle (looking up from underneath, or through the near wall) there is simply nothing to draw and the glass vanishes. NO_CULL on the render type did not override that. A nested inner box gives the inward view its own outward-facing quads, which no render state can undo.",
+      "from": [2.77, 7.02, 6.77],
+      "to": [5.23, 11.38, 9.23],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 1 shoulder, outer surface.",
+      "from": [3.15, 11.4, 7.15],
+      "to": [4.85, 12.2, 8.85],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 1 shoulder, INNER surface - a shell 0.02 inside the outer one. A vanilla block model emits outward-facing quads only, so from inside the bottle (looking up from underneath, or through the near wall) there is simply nothing to draw and the glass vanishes. NO_CULL on the render type did not override that. A nested inner box gives the inward view its own outward-facing quads, which no render state can undo.",
+      "from": [3.17, 11.42, 7.17],
+      "to": [4.83, 12.18, 8.83],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 2 envelope, outer surface.",
+      "from": [5.75, 7, 6.75],
+      "to": [8.25, 11.4, 9.25],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 2 envelope, INNER surface - a shell 0.02 inside the outer one. A vanilla block model emits outward-facing quads only, so from inside the bottle (looking up from underneath, or through the near wall) there is simply nothing to draw and the glass vanishes. NO_CULL on the render type did not override that. A nested inner box gives the inward view its own outward-facing quads, which no render state can undo.",
+      "from": [5.77, 7.02, 6.77],
+      "to": [8.23, 11.38, 9.23],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 2 shoulder, outer surface.",
+      "from": [6.15, 11.4, 7.15],
+      "to": [7.85, 12.2, 8.85],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 2 shoulder, INNER surface - a shell 0.02 inside the outer one. A vanilla block model emits outward-facing quads only, so from inside the bottle (looking up from underneath, or through the near wall) there is simply nothing to draw and the glass vanishes. NO_CULL on the render type did not override that. A nested inner box gives the inward view its own outward-facing quads, which no render state can undo.",
+      "from": [6.17, 11.42, 7.17],
+      "to": [7.83, 12.18, 8.83],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 3 envelope, outer surface.",
+      "from": [8.75, 7, 6.75],
+      "to": [11.25, 11.4, 9.25],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 3 envelope, INNER surface - a shell 0.02 inside the outer one. A vanilla block model emits outward-facing quads only, so from inside the bottle (looking up from underneath, or through the near wall) there is simply nothing to draw and the glass vanishes. NO_CULL on the render type did not override that. A nested inner box gives the inward view its own outward-facing quads, which no render state can undo.",
+      "from": [8.77, 7.02, 6.77],
+      "to": [11.23, 11.38, 9.23],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 3 shoulder, outer surface.",
+      "from": [9.15, 11.4, 7.15],
+      "to": [10.85, 12.2, 8.85],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 3 shoulder, INNER surface - a shell 0.02 inside the outer one. A vanilla block model emits outward-facing quads only, so from inside the bottle (looking up from underneath, or through the near wall) there is simply nothing to draw and the glass vanishes. NO_CULL on the render type did not override that. A nested inner box gives the inward view its own outward-facing quads, which no render state can undo.",
+      "from": [9.17, 11.42, 7.17],
+      "to": [10.83, 12.18, 8.83],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 4 envelope, outer surface.",
+      "from": [11.75, 7, 6.75],
+      "to": [14.25, 11.4, 9.25],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 4 envelope, INNER surface - a shell 0.02 inside the outer one. A vanilla block model emits outward-facing quads only, so from inside the bottle (looking up from underneath, or through the near wall) there is simply nothing to draw and the glass vanishes. NO_CULL on the render type did not override that. A nested inner box gives the inward view its own outward-facing quads, which no render state can undo.",
+      "from": [11.77, 7.02, 6.77],
+      "to": [14.23, 11.38, 9.23],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 4 shoulder, outer surface.",
+      "from": [12.15, 11.4, 7.15],
+      "to": [13.85, 12.2, 8.85],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    },
+    {
+      "__comment": "Tube 4 shoulder, INNER surface - a shell 0.02 inside the outer one. A vanilla block model emits outward-facing quads only, so from inside the bottle (looking up from underneath, or through the near wall) there is simply nothing to draw and the glass vanishes. NO_CULL on the render type did not override that. A nested inner box gives the inward view its own outward-facing quads, which no render state can undo.",
+      "from": [12.17, 11.42, 7.17],
+      "to": [13.83, 12.18, 8.83],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "east":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "west":  {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "up":    {"uv": [0, 0, 16, 16], "texture": "#tube"},
+        "down":  {"uv": [0, 0, 16, 16], "texture": "#tube"}
+      }
+    }
+  ]
+}

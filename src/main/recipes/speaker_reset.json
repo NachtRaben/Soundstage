@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "redstone",
+  "ingredients": [
+    "soundstage:speaker"
+  ],
+  "result": {
+    "count": 1,
+    "id": "soundstage:speaker"
+  }
+}

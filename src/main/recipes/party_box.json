@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "key": {
+    "P": "#minecraft:planks",
+    "S": "soundstage:speaker",
+    "C": "soundstage:receiver"
+  },
+  "pattern": [
+    "PPP",
+    "SCS",
+    "PPP"
+  ],
+  "result": { "count": 1, "id": "soundstage:party_box" }
+}

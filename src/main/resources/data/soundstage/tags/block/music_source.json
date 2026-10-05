@@ -1,0 +1,10 @@
+{
+  "replace": false,
+  "values": [
+    "soundstage:speaker",
+    "soundstage:satellite_speaker",
+    "soundstage:center_speaker",
+    "soundstage:subwoofer",
+    "soundstage:party_box"
+  ]
+}

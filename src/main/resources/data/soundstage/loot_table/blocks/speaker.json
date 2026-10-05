@@ -1,0 +1,38 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "bonus_rolls": 0.0,
+      "conditions": [
+        {
+          "condition": "minecraft:survives_explosion"
+        }
+      ],
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "soundstage:speaker",
+          "functions": [
+            {
+              "function": "minecraft:copy_components",
+              "source": "block_entity",
+              "include": [
+                "soundstage:speaker_finish",
+                "soundstage:speaker_settings"
+              ]
+            },
+            {
+              "function": "minecraft:copy_state",
+              "block": "soundstage:speaker",
+              "properties": [
+                "grille"
+              ]
+            }
+          ]
+        }
+      ],
+      "rolls": 1.0
+    }
+  ],
+  "random_sequence": "soundstage:blocks/speaker"
+}

@@ -1,0 +1,77 @@
+{
+  "__comment": "70s hi-fi separate: brushed aluminium faceplate with two VU meters, flanked by wood end caps that ReceiverBlockEntityRenderer draws in the chosen finish, like a speaker casing. The needles are NOT in the texture - they are drawn by ReceiverBlockEntityRenderer, which shares the meter constants. Faceplate art is 224x96px sampled at uv [0,0,14,6] onto a 14x6 face, which is 16px per block unit in BOTH axes, so unlike the speaker fronts there is no aspect pre-distortion here. See tools/generate_receiver_textures.py. Four output tubes rise through cut-outs in the heatsink top, drawn with their sockets and cages by the renderer; their glow is thermal, not signal-following - see core/TubeThermalModel. The glass envelopes are NOT in this file: they are drawn by ReceiverBlockEntityRenderer on a render type that does not write depth, because glass that writes depth occludes its own filament.",
+  "parent": "block/block",
+  "textures": {
+    "particle": "soundstage:block/receiver_casing",
+    "casing": "soundstage:block/receiver_casing",
+    "face": "soundstage:block/receiver_face",
+    "tube": "soundstage:block/receiver_tube",
+    "plate": "soundstage:block/receiver_tube_plate"
+  },
+  "elements": [
+    {
+      "__comment": "Chassis. North is the faceplate; every other face is brushed casing, with uv chosen to match each face's proportions so the grain keeps an even texel density. It stops at z=12.5 and has no top face: AmplifierChassisRenderer draws the heatsink top with its tube cut-outs, the fins and the rear terminals.",
+      "from": [1, 0, 1],
+      "to": [15, 6, 12.5],
+      "faces": {
+        "north": {"uv": [0, 0, 14, 6], "texture": "#face"},
+        "east":  {"uv": [0, 0, 11.5, 6], "texture": "#casing"},
+        "south": {"uv": [0, 0, 14, 6], "texture": "#casing"},
+        "west":  {"uv": [0, 0, 11.5, 6], "texture": "#casing"},
+        "down":  {"uv": [0, 0, 14, 11.5], "texture": "#casing"}
+      }
+    },
+    {
+      "__comment": "Tube 1 anode stack, suspended inside the glass. Solid, opaque, and sized so there is clear glass all around it - that gap is what makes it read as being INSIDE something.",
+      "from": [3.38, 8.2, 7.38],
+      "to": [4.62, 11, 8.62],
+      "faces": {
+        "north": {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "east":  {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "south": {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "west":  {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "up":    {"uv": [0, 0, 8, 8], "texture": "#plate"},
+        "down":  {"uv": [0, 0, 8, 8], "texture": "#plate"}
+      }
+    },
+    {
+      "__comment": "Tube 2 anode stack, suspended inside the glass. Solid, opaque, and sized so there is clear glass all around it - that gap is what makes it read as being INSIDE something.",
+      "from": [6.38, 8.2, 7.38],
+      "to": [7.62, 11, 8.62],
+      "faces": {
+        "north": {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "east":  {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "south": {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "west":  {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "up":    {"uv": [0, 0, 8, 8], "texture": "#plate"},
+        "down":  {"uv": [0, 0, 8, 8], "texture": "#plate"}
+      }
+    },
+    {
+      "__comment": "Tube 3 anode stack, suspended inside the glass. Solid, opaque, and sized so there is clear glass all around it - that gap is what makes it read as being INSIDE something.",
+      "from": [9.38, 8.2, 7.38],
+      "to": [10.62, 11, 8.62],
+      "faces": {
+        "north": {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "east":  {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "south": {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "west":  {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "up":    {"uv": [0, 0, 8, 8], "texture": "#plate"},
+        "down":  {"uv": [0, 0, 8, 8], "texture": "#plate"}
+      }
+    },
+    {
+      "__comment": "Tube 4 anode stack, suspended inside the glass. Solid, opaque, and sized so there is clear glass all around it - that gap is what makes it read as being INSIDE something.",
+      "from": [12.38, 8.2, 7.38],
+      "to": [13.62, 11, 8.62],
+      "faces": {
+        "north": {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "east":  {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "south": {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "west":  {"uv": [0, 0, 8, 16], "texture": "#plate"},
+        "up":    {"uv": [0, 0, 8, 8], "texture": "#plate"},
+        "down":  {"uv": [0, 0, 8, 8], "texture": "#plate"}
+      }
+    }
+  ]
+}

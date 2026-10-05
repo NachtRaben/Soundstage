@@ -1,0 +1,21 @@
+{
+  "__comment": "Every 'y' is gone on purpose. The receiver renders as ENTITYBLOCK_ANIMATED so the VU meters can move, which means Minecraft never consults rotation here - ReceiverBlockEntityRenderer applies it as rotation * 360/16. This file used to carry real y values; they stopped doing anything the moment the render shape changed, and leaving them would invite someone to 'fix' a rotation bug here and see no effect. Same trap the speaker blockstates have.",
+  "variants": {
+    "rotation=0":  { "model": "soundstage:block/receiver" },
+    "rotation=1":  { "model": "soundstage:block/receiver" },
+    "rotation=2":  { "model": "soundstage:block/receiver" },
+    "rotation=3":  { "model": "soundstage:block/receiver" },
+    "rotation=4":  { "model": "soundstage:block/receiver" },
+    "rotation=5":  { "model": "soundstage:block/receiver" },
+    "rotation=6":  { "model": "soundstage:block/receiver" },
+    "rotation=7":  { "model": "soundstage:block/receiver" },
+    "rotation=8":  { "model": "soundstage:block/receiver" },
+    "rotation=9":  { "model": "soundstage:block/receiver" },
+    "rotation=10": { "model": "soundstage:block/receiver" },
+    "rotation=11": { "model": "soundstage:block/receiver" },
+    "rotation=12": { "model": "soundstage:block/receiver" },
+    "rotation=13": { "model": "soundstage:block/receiver" },
+    "rotation=14": { "model": "soundstage:block/receiver" },
+    "rotation=15": { "model": "soundstage:block/receiver" }
+  }
+}

@@ -1,0 +1,58 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "Apache-2.0"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "Soundstage"
+authors = "NachtRaben"
+credits = "Sound through LavaPlayer and youtube-source; pictures decoded by JCodec; films and videos prepared by FFmpeg on the server."
+description = '''
+Speakers, a receiver and screens to build into your world.
+
+The receiver plays YouTube, SoundCloud, Bandcamp, Vimeo and Twitch, files from the server's media folder, or whatever your own computer is playing, through every speaker linked to it. The speakers stay in time with each other, can be set up for stereo or 5.1, and their cones move with the music. Link a wall of screens and videos, films and streams play on it, with subtitles.
+'''
+logoFile = "assets/soundstage/icon.png"
+logoBlur = false
+
+[[mixins]]
+config = "soundstage-common.mixins.json"
+
+[[mixins]]
+config = "soundstage-sodium.mixins.json"
+
+[[dependencies.${mod_id}]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1.248,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "armalib"
+type = "required"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "armalib_audio"
+type = "required"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "armalib_config"
+type = "required"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"

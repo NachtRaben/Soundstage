@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "redstone",
+  "ingredients": [
+    "soundstage:party_box"
+  ],
+  "result": {
+    "count": 1,
+    "id": "soundstage:party_box"
+  }
+}
