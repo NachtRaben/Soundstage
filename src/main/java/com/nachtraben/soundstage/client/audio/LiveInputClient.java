@@ -13,10 +13,6 @@ public final class LiveInputClient {
 
     public enum State { IDLE, STARTING, SHARING }
 
-    public static final String RIG_DEVICE = "Soundstage rig tone";
-
-    public static volatile java.util.function.Function<String, LiveInputCapture.Source> sourceOverride;
-
     private static final long START_TIMEOUT_MILLIS = 5_000;
 
     private static State state = State.IDLE;

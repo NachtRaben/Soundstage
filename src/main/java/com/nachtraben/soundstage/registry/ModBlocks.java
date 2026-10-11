@@ -30,31 +30,38 @@ public class ModBlocks {
     }
 
     public static final RegistryEntry<Block> SPEAKER_BLOCK = BLOCKS.register("speaker", () ->
-            new SpeakerBlock(props("speaker").mapColor(MapColor.WOOD).sound(SoundType.WOOD).strength(1.5f, 6.0f).noOcclusion())
+            new SpeakerBlock(props("speaker").mapColor(MapColor.WOOD).sound(SoundType.WOOD).strength(1.5f, 6.0f)
+                    .noOcclusion())
     );
 
     public static final RegistryEntry<Block> SATELLITE_SPEAKER_BLOCK = BLOCKS.register("satellite_speaker", () ->
-            new SatelliteSpeakerBlock(props("satellite_speaker").mapColor(MapColor.WOOD).sound(SoundType.WOOD).strength(1.5f, 6.0f).noOcclusion())
+            new SatelliteSpeakerBlock(props("satellite_speaker").mapColor(MapColor.WOOD).sound(SoundType.WOOD)
+                    .strength(1.5f, 6.0f).noOcclusion())
     );
 
     public static final RegistryEntry<Block> CENTER_SPEAKER_BLOCK = BLOCKS.register("center_speaker", () ->
-            new CenterSpeakerBlock(props("center_speaker").mapColor(MapColor.WOOD).sound(SoundType.WOOD).strength(1.5f, 6.0f).noOcclusion())
+            new CenterSpeakerBlock(props("center_speaker").mapColor(MapColor.WOOD).sound(SoundType.WOOD)
+                    .strength(1.5f, 6.0f).noOcclusion())
     );
 
     public static final RegistryEntry<Block> SUBWOOFER_BLOCK = BLOCKS.register("subwoofer", () ->
-            new SubwooferBlock(props("subwoofer").mapColor(MapColor.WOOD).sound(SoundType.WOOD).strength(1.5f, 6.0f).noOcclusion())
+            new SubwooferBlock(props("subwoofer").mapColor(MapColor.WOOD).sound(SoundType.WOOD).strength(1.5f, 6.0f)
+                    .noOcclusion())
     );
 
     public static final RegistryEntry<Block> PARTY_BOX_BLOCK = BLOCKS.register("party_box", () ->
-            new PartyBoxBlock(props("party_box").mapColor(MapColor.WOOD).sound(SoundType.WOOD).strength(1.5f, 6.0f).noOcclusion())
+            new PartyBoxBlock(props("party_box").mapColor(MapColor.WOOD).sound(SoundType.WOOD).strength(1.5f, 6.0f)
+                    .noOcclusion())
     );
 
     public static final RegistryEntry<Block> RECEIVER_BLOCK = BLOCKS.register("receiver", () ->
-            new ReceiverBlock(props("receiver").mapColor(MapColor.METAL).sound(SoundType.METAL).strength(1.5f, 6.0f).noOcclusion())
+            new ReceiverBlock(props("receiver").mapColor(MapColor.METAL).sound(SoundType.METAL).strength(1.5f, 6.0f)
+                    .noOcclusion())
     );
 
     public static final RegistryEntry<Block> SCREEN_BLOCK = BLOCKS.register("screen", () ->
-            new ScreenBlock(props("screen").mapColor(MapColor.COLOR_BLACK).sound(SoundType.METAL).strength(1.5f, 6.0f).noOcclusion())
+            new ScreenBlock(props("screen").mapColor(MapColor.COLOR_BLACK).sound(SoundType.METAL).strength(1.5f, 6.0f)
+                    .noOcclusion())
     );
 
     public static void init() {

@@ -8,6 +8,9 @@ import dev.armadeus.armalib.core.config.EnumSetting;
 import dev.armadeus.armalib.core.config.Scope;
 import dev.armadeus.armalib.core.config.StringSetting;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+
 public final class AppearanceConfigSpec implements AppearanceSettings {
 
     private static final String REGISTRATION_ID = "soundstage_config_internal";
@@ -42,8 +45,7 @@ public final class AppearanceConfigSpec implements AppearanceSettings {
                     "suspension say it does, so this cannot push one through its grille.");
             trackChangeToast = b.define("trackChangeToast", D.trackChangeToast(),
                     "Show a toast naming the track when playback changes on a receiver nearby.",
-                    "This is the only announcement there is: turning it off means no notice of a",
-                    "track change, not a return to the action-bar line it replaced.");
+                    "Turning it off means no announcement of a track change.");
             trackChangeToastArtwork = b.define("trackChangeToastArtwork", D.trackChangeToastArtwork(),
                     "Show the track's cover art on that toast, and on a display's now-playing card.",
                     "Fetching it means this client connects to whoever hosts the image, which is a",
@@ -114,11 +116,10 @@ public final class AppearanceConfigSpec implements AppearanceSettings {
     }
 
     private static void save() {
-        if (com.nachtraben.soundstage.RigStaging.fault("settings-unsaved")) return;
         try {
             Configs.save(SPEC);
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException("soundstage-client.aon could not be saved", e);
+        } catch (IOException e) {
+            throw new UncheckedIOException("soundstage-client.aon could not be saved", e);
         }
     }
 }

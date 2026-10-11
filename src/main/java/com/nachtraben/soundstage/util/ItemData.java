@@ -4,7 +4,7 @@ import com.nachtraben.soundstage.block.speaker.SpeakerFinish;
 import com.nachtraben.soundstage.block.speaker.SpeakerSettings;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 
 public final class ItemData {
@@ -28,6 +28,20 @@ public final class ItemData {
         stack.set(com.nachtraben.soundstage.registry.ModComponents.SPEAKER_SETTINGS.get(), settings);
     }
 
+    public static net.minecraft.core.GlobalPos remoteLink(ItemStack stack) {
+        return stack.get(com.nachtraben.soundstage.registry.ModComponents.REMOTE_LINK.get());
+    }
+
+    public static void setRemoteLink(ItemStack stack, net.minecraft.core.GlobalPos link) {
+        stack.set(com.nachtraben.soundstage.registry.ModComponents.REMOTE_LINK.get(), link);
+    }
+
+    public static BlockState blockState(ItemStack stack, BlockState base) {
+        net.minecraft.world.item.component.BlockItemStateProperties properties =
+                stack.get(net.minecraft.core.component.DataComponents.BLOCK_STATE);
+        return properties == null ? base : properties.apply(base);
+    }
+
     public static void setBlockState(ItemStack stack, BooleanProperty property, boolean value) {
         stack.set(net.minecraft.core.component.DataComponents.BLOCK_STATE,
                 stack.getOrDefault(net.minecraft.core.component.DataComponents.BLOCK_STATE,
@@ -36,12 +50,14 @@ public final class ItemData {
     }
 
     public static CompoundTag customData(ItemStack stack) {
-        net.minecraft.world.item.component.CustomData data = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
+        net.minecraft.world.item.component.CustomData data =
+                stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
         return data == null ? null : data.copyTag();
     }
 
     public static void setCustomData(ItemStack stack, CompoundTag tag) {
-        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                net.minecraft.world.item.component.CustomData.of(tag));
     }
     //?} else {
     /*private static final String ROOT = "soundstage";
@@ -62,8 +78,32 @@ public final class ItemData {
         write(stack, "settings", SpeakerSettings.CODEC, settings);
     }
 
+    public static net.minecraft.core.GlobalPos remoteLink(ItemStack stack) {
+        return read(stack, "remote", net.minecraft.core.GlobalPos.CODEC);
+    }
+
+    public static void setRemoteLink(ItemStack stack, net.minecraft.core.GlobalPos link) {
+        write(stack, "remote", net.minecraft.core.GlobalPos.CODEC, link);
+    }
+
+    public static BlockState blockState(ItemStack stack, BlockState base) {
+        CompoundTag tag = stack.getTagElement(net.minecraft.world.item.BlockItem.BLOCK_STATE_TAG);
+        if (tag == null) return base;
+        BlockState state = base;
+        for (net.minecraft.world.level.block.state.properties.Property<?> property : base.getProperties()) {
+            if (tag.contains(property.getName())) state = withValue(state, property, tag.getString(property.getName()));
+        }
+        return state;
+    }
+
+    private static <T extends Comparable<T>> BlockState withValue(BlockState state,
+            net.minecraft.world.level.block.state.properties.Property<T> property, String value) {
+        return property.getValue(value).map(v -> state.setValue(property, v)).orElse(state);
+    }
+
     public static void setBlockState(ItemStack stack, BooleanProperty property, boolean value) {
-        stack.getOrCreateTagElement(net.minecraft.world.item.BlockItem.BLOCK_STATE_TAG).putString(property.getName(), String.valueOf(value));
+        stack.getOrCreateTagElement(net.minecraft.world.item.BlockItem.BLOCK_STATE_TAG)
+                .putString(property.getName(), String.valueOf(value));
     }
 
     public static CompoundTag customData(ItemStack stack) {
@@ -86,14 +126,4 @@ public final class ItemData {
                 .ifPresent(tag -> stack.getOrCreateTagElement(ROOT).put(key, tag));
     }
     *///?}
-
-    public static ItemStack withBlockEntityData(ItemStack stack, BlockEntityType<?> type, CompoundTag data) {
-        //? if >=1.21.11 {
-        /*stack.set(net.minecraft.core.component.DataComponents.BLOCK_ENTITY_DATA,
-                net.minecraft.world.item.component.TypedEntityData.of(type, data));
-        *///?} else {
-        net.minecraft.world.item.BlockItem.setBlockEntityData(stack, type, data);
-        //?}
-        return stack;
-    }
 }

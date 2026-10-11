@@ -1,6 +1,7 @@
 package com.nachtraben.soundstage.registry;
 
 import com.nachtraben.soundstage.SoundstageInit;
+import com.nachtraben.soundstage.item.RemoteItem;
 import com.nachtraben.soundstage.item.SpeakerLinkItem;
 import dev.armadeus.armalib.platform.registry.Registrar;
 import dev.armadeus.armalib.platform.registry.RegistryEntry;
@@ -59,6 +60,10 @@ public class ModItems {
 
     public static final RegistryEntry<Item> SPEAKER_LINK = ITEMS.register("speaker_link", () ->
             new SpeakerLinkItem(itemProps("speaker_link").stacksTo(1))
+    );
+
+    public static final RegistryEntry<Item> REMOTE = ITEMS.register("remote", () ->
+            new RemoteItem(itemProps("remote").stacksTo(1))
     );
 
     public static void init() {

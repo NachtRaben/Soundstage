@@ -6,7 +6,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -20,9 +22,17 @@ public final class Fmp4ToTs {
     static final int AUDIO_PID = 0x101;
 
     private static final byte[] AUD = {0, 0, 0, 1, 0x09, (byte) 0xF0};
+    private static final byte[] HEVC_AUD = {0, 0, 0, 1, 0x46, 0x01, 0x50};
     private static final byte[] START_CODE = {0, 0, 0, 1};
     private static final int NAL_IDR = 5;
     private static final int NAL_SPS = 7;
+    private static final int NAL_AUD = 9;
+    private static final int HEVC_FIRST_IRAP = 16;
+    private static final int HEVC_LAST_IRAP = 21;
+    private static final int HEVC_VPS = 32;
+    private static final int HEVC_AUD_TYPE = 35;
+    static final int STREAM_TYPE_H264 = 0x1B;
+    static final int STREAM_TYPE_HEVC = 0x24;
 
     private int patCounter;
     private int pmtCounter;
@@ -96,7 +106,7 @@ public final class Fmp4ToTs {
             }
             if (header.length < 8) throw new EOFException("fragmented MP4 cut short in a box header");
             long size = Integer.toUnsignedLong(ByteBuffer.wrap(header).getInt());
-            String type = new String(header, 4, 4, java.nio.charset.StandardCharsets.ISO_8859_1);
+            String type = new String(header, 4, 4, StandardCharsets.ISO_8859_1);
             int headerSize = 8;
             if (size == 1) {
                 byte[] large = in.readNBytes(8);
@@ -237,7 +247,9 @@ public final class Fmp4ToTs {
                     long size = (flags & 0x200) != 0 ? Integer.toUnsignedLong(b.getInt()) : defaultSize;
                     if ((flags & 0x400) != 0) b.getInt();
                     long composition = 0;
-                    if ((flags & 0x800) != 0) composition = version == 0 ? Integer.toUnsignedLong(b.getInt()) : b.getInt();
+                    if ((flags & 0x800) != 0) {
+                        composition = version == 0 ? Integer.toUnsignedLong(b.getInt()) : b.getInt();
+                    }
                     if (size > MAX_BOX_BYTES) throw new IOException("a sample of " + size + " bytes");
                     if (video || audio) {
                         long dts90 = ticks90(decodeTime, timescale);
@@ -255,7 +267,7 @@ public final class Fmp4ToTs {
         private void writeVideo(byte[] mdat, int at, Sample sample) throws IOException {
             Fmp4Init.Video v = init.video();
             ByteArrayOutputStream unit = new ByteArrayOutputStream(sample.size() + 64);
-            unit.write(AUD);
+            unit.write(v.hevc() ? HEVC_AUD : AUD);
             boolean keyframe = false;
             boolean hasSps = false;
             List<int[]> nals = new ArrayList<>();
@@ -267,26 +279,22 @@ public final class Fmp4ToTs {
                 p += v.nalLengthSize();
                 if (length < 0 || p + length > end) throw new IOException("a NAL runs past its sample");
                 if (length > 0) {
-                    int type = mdat[p] & 0x1F;
-                    if (type == NAL_IDR) keyframe = true;
-                    if (type == NAL_SPS) hasSps = true;
+                    int type = nalType(v, mdat[p]);
+                    if (v.hevc() ? type >= HEVC_FIRST_IRAP && type <= HEVC_LAST_IRAP : type == NAL_IDR) keyframe = true;
+                    if (v.hevc() ? type == HEVC_VPS : type == NAL_SPS) hasSps = true;
                     nals.add(new int[] {p, length});
                 }
                 p += length;
             }
             if (keyframe && !hasSps) {
-                for (byte[] sps : v.sps()) {
+                for (byte[] set : v.parameterSets()) {
                     unit.write(START_CODE);
-                    unit.write(sps);
-                }
-                for (byte[] pps : v.pps()) {
-                    unit.write(START_CODE);
-                    unit.write(pps);
+                    unit.write(set);
                 }
             }
             for (int[] nal : nals) {
-                int type = mdat[nal[0]] & 0x1F;
-                if (type == 9) continue;
+                int type = nalType(v, mdat[nal[0]]);
+                if (type == (v.hevc() ? HEVC_AUD_TYPE : NAL_AUD)) continue;
                 unit.write(START_CODE);
                 unit.write(mdat, nal[0], nal[1]);
             }
@@ -299,7 +307,9 @@ public final class Fmp4ToTs {
                     0x00, 0x01, (byte) (0xE0 | (PMT_PID >> 8)), (byte) PMT_PID};
             writeSection(out, 0, pat, patCounter++);
             ByteArrayOutputStream streams = new ByteArrayOutputStream();
-            if (init.video() != null) streamEntry(streams, 0x1B, VIDEO_PID);
+            if (init.video() != null) {
+                streamEntry(streams, init.video().hevc() ? STREAM_TYPE_HEVC : STREAM_TYPE_H264, VIDEO_PID);
+            }
             if (init.audio() != null) streamEntry(streams, 0x0F, AUDIO_PID);
             int pcrPid = init.video() != null ? VIDEO_PID : AUDIO_PID;
             byte[] entries = streams.toByteArray();
@@ -333,7 +343,7 @@ public final class Fmp4ToTs {
 
         private void writeSection(ByteArrayOutputStream out, int pid, byte[] section, int counter) {
             byte[] packet = new byte[PACKET_SIZE];
-            java.util.Arrays.fill(packet, (byte) 0xFF);
+            Arrays.fill(packet, (byte) 0xFF);
             packet[0] = 0x47;
             packet[1] = (byte) (0x40 | (pid >> 8));
             packet[2] = (byte) pid;
@@ -420,6 +430,10 @@ public final class Fmp4ToTs {
                 first = false;
             }
         }
+    }
+
+    private static int nalType(Fmp4Init.Video video, byte first) {
+        return video.hevc() ? (first >> 1) & 0x3F : first & 0x1F;
     }
 
     static long ticks90(long time, long timescale) {

@@ -1,25 +1,40 @@
 package com.nachtraben.soundstage.client.audio;
 
+import com.nachtraben.soundstage.core.ArrivalLateness;
+import com.nachtraben.soundstage.core.AudibleClock;
+import com.nachtraben.soundstage.core.AudioDSP;
+import com.nachtraben.soundstage.core.ChannelMode;
+import com.nachtraben.soundstage.core.DeviceClockTimeline;
 import com.nachtraben.soundstage.core.HandedFrameMap;
 import com.nachtraben.soundstage.core.HeardDelays;
-import net.minecraft.client.Minecraft;
-import net.minecraft.core.BlockPos;
-
-import com.nachtraben.soundstage.core.AudioDSP;
-import com.nachtraben.soundstage.core.AudibleClock;
-import com.nachtraben.soundstage.core.ChannelMode;
 import com.nachtraben.soundstage.core.LevelMeterModel;
-import com.nachtraben.soundstage.core.StreamSyncState;
-import com.nachtraben.soundstage.core.DeviceClockTimeline;
 import com.nachtraben.soundstage.core.OpusCodec;
 import com.nachtraben.soundstage.core.PcmRing;
+import com.nachtraben.soundstage.core.SmoothedHead;
+import com.nachtraben.soundstage.core.SpeakerAcoustics;
 import com.nachtraben.soundstage.core.SpeakerOutput;
+import com.nachtraben.soundstage.core.StartPhaseGrid;
+import com.nachtraben.soundstage.core.StreamSyncState;
+import com.nachtraben.soundstage.core.SurroundDownmix;
 import com.nachtraben.soundstage.core.TraceBuffer;
 import com.nachtraben.soundstage.core.TubeThermalModel;
 import com.nachtraben.soundstage.core.video.AudioTimeline;
+import com.nachtraben.soundstage.network.AudioPacket;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
+import org.slf4j.LoggerFactory;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.ShortBuffer;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalDouble;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ClientAudioReceiver {
 
@@ -111,8 +126,8 @@ public class ClientAudioReceiver {
         return false;
     }
 
-    java.util.OptionalDouble groupSampleAt(long deviceClockNanos, BlockPos joiningSpeaker) {
-        java.util.ArrayList<DeviceClockTimeline.Point> points = new java.util.ArrayList<>();
+    OptionalDouble groupSampleAt(long deviceClockNanos, BlockPos joiningSpeaker) {
+        ArrayList<DeviceClockTimeline.Point> points = new ArrayList<>();
         for (var entry : deviceClockObservations.entrySet()) {
             if (entry.getKey().equals(joiningSpeaker)) continue;
             DeviceClockObservation observation = entry.getValue();
@@ -163,25 +178,6 @@ public class ClientAudioReceiver {
     private static final boolean CLOCK_TRACE = Boolean.getBoolean("soundstage.synctrace");
     private static final long CLOCK_TRACE_INTERVAL_NANOS = 2_000_000_000L;
     private long lastClockTraceNanos;
-
-    private int measuredSpeakers;
-
-    public AudibleClock.Source audibleClockSource() {
-        return audibleClock.source();
-    }
-
-    public String audibleClockDiagnosis() {
-        int reading = 0;
-        int mirrorsBroken = 0;
-        for (StreamingSoundInstance stream : streams.values()) {
-            JitterAudioStream jitter = stream.getJitterStream();
-            if (jitter == null) continue;
-            reading++;
-            if (jitter.isQueueMirrorBroken()) mirrorsBroken++;
-        }
-        return "device clock " + DeviceClockSampler.status() + "; " + measuredSpeakers + " of " + reading
-                + " speaker(s) with a channel measured; " + mirrorsBroken + " queue mirror(s) out of step";
-    }
 
     private final TraceBuffer leftLevel = new TraceBuffer(PcmRing.RETAINED_FRAMES);
     private final TraceBuffer rightLevel = new TraceBuffer(PcmRing.RETAINED_FRAMES);
@@ -235,16 +231,16 @@ public class ClientAudioReceiver {
         return rightLevel.sample(sequence);
     }
 
-    public final java.util.Map<BlockPos, com.nachtraben.soundstage.core.SpeakerAcoustics>
-            declaredAcoustics = new java.util.concurrent.ConcurrentHashMap<>();
+    public final Map<BlockPos, SpeakerAcoustics>
+            declaredAcoustics = new ConcurrentHashMap<>();
 
-    public final java.util.Map<BlockPos, Integer> declaredVolumes =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    public final Map<BlockPos, Integer> declaredVolumes =
+            new ConcurrentHashMap<>();
 
-    private final java.util.concurrent.atomic.AtomicInteger unfilteredFrames =
-            new java.util.concurrent.atomic.AtomicInteger();
-    private final java.util.concurrent.atomic.AtomicInteger wrongFilterFrames =
-            new java.util.concurrent.atomic.AtomicInteger();
+    private final AtomicInteger unfilteredFrames =
+            new AtomicInteger();
+    private final AtomicInteger wrongFilterFrames =
+            new AtomicInteger();
 
     void recordFilterFrame(boolean unresolved, boolean wrong) {
         if (unresolved) unfilteredFrames.incrementAndGet();
@@ -267,7 +263,7 @@ public class ClientAudioReceiver {
         this.receiverPos = pos;
         this.decoder = decoder;
     }
-    
+
     public long getLowestSequence() {
         return ring.lowestSequence();
     }
@@ -317,7 +313,7 @@ public class ClientAudioReceiver {
         return Math.max(floor, highest - leadFrames + 1);
     }
 
-    public volatile java.util.Set<BlockPos> lastDispatchTargets = java.util.Set.of();
+    public volatile Set<BlockPos> lastDispatchTargets = Set.of();
 
     public volatile long lastPacketNanos = 0L;
 
@@ -325,8 +321,8 @@ public class ClientAudioReceiver {
 
     public volatile int latenessFrames;
 
-    public final com.nachtraben.soundstage.core.ArrivalLateness arrivalLateness =
-            new com.nachtraben.soundstage.core.ArrivalLateness();
+    public final ArrivalLateness arrivalLateness =
+            new ArrivalLateness();
 
     public volatile long resumeFloorSequence = -1;
 
@@ -346,15 +342,15 @@ public class ClientAudioReceiver {
         return (lastEdgeStarvedNanos - edgeStarvedSinceNanos) / 1_000_000L;
     }
 
-    private final com.nachtraben.soundstage.core.StartPhaseGrid startPhaseGrid =
-            new com.nachtraben.soundstage.core.StartPhaseGrid();
+    private final StartPhaseGrid startPhaseGrid =
+            new StartPhaseGrid();
 
     public long getGroupStartSequence() {
         long lowest = getLowestSequence();
         if (lowest == -1) return -1;
         return groupStartSequence(lowest);
     }
-    
+
     public double getAudibleSequence() {
         long now = System.nanoTime();
         long pumped = getReferencePlayhead();
@@ -384,19 +380,18 @@ public class ClientAudioReceiver {
         double latencyFrames = device == null ? 0.0 : device.latencyNanos() / AudibleClock.NANOS_PER_FRAME;
         double audible = audibleClock.sample(now, new AudibleClock.Reading(pumped, pumpIsFill,
                 heardPositions.medianSequence(), heardPositions.capSequence(), latencyFrames));
-        measuredSpeakers = heardPositions.count();
         if (CLOCK_TRACE && now - lastClockTraceNanos > CLOCK_TRACE_INTERVAL_NANOS && pumped != -1) {
             lastClockTraceNanos = now;
             double old = pumped - 8.0;
-            org.slf4j.LoggerFactory.getLogger("Soundstage").info(
+            LoggerFactory.getLogger("Soundstage").info(
                     "SOUNDSTAGE-CLOCK: receiver={} source={} speakers={} audible={} fillMinus8={} ({} frames ahead) "
                             + "fillLead={} deviceLatencyMs={}",
                     receiverPos.toShortString(), audibleClock.source(), heardPositions.count(),
-                    String.format(java.util.Locale.ROOT, "%.2f", audible),
-                    String.format(java.util.Locale.ROOT, "%.2f", old),
-                    audible < 0 ? "n/a" : String.format(java.util.Locale.ROOT, "%+.2f", old - audible),
-                    String.format(java.util.Locale.ROOT, "%.2f", audibleClock.fillLeadFrames()),
-                    device == null ? "n/a" : String.format(java.util.Locale.ROOT, "%.2f", device.latencyNanos() / 1e6));
+                    String.format(Locale.ROOT, "%.2f", audible),
+                    String.format(Locale.ROOT, "%.2f", old),
+                    audible < 0 ? "n/a" : String.format(Locale.ROOT, "%+.2f", old - audible),
+                    String.format(Locale.ROOT, "%.2f", audibleClock.fillLeadFrames()),
+                    device == null ? "n/a" : String.format(Locale.ROOT, "%.2f", device.latencyNanos() / 1e6));
         }
         return audible;
     }
@@ -422,8 +417,8 @@ public class ClientAudioReceiver {
     private long sampledFrame = -1;
     private double sampledAudible;
 
-    public final com.nachtraben.soundstage.core.SmoothedHead smoothedHead =
-            new com.nachtraben.soundstage.core.SmoothedHead();
+    public final SmoothedHead smoothedHead =
+            new SmoothedHead();
 
     public long getDesignedPosition() {
         long line = smoothedHead.currentFrame(System.nanoTime());
@@ -445,23 +440,23 @@ public class ClientAudioReceiver {
         ring.add(sequence, stereoPcm, surroundPcm);
     }
 
-    public volatile com.nachtraben.soundstage.core.SurroundDownmix.Layout surroundLayout =
-            com.nachtraben.soundstage.core.SurroundDownmix.Layout.NONE;
+    public volatile SurroundDownmix.Layout surroundLayout =
+            SurroundDownmix.Layout.NONE;
 
     public void refreshSurroundLayout() {
-        java.util.EnumSet<ChannelMode> modes = java.util.EnumSet.noneOf(ChannelMode.class);
+        EnumSet<ChannelMode> modes = EnumSet.noneOf(ChannelMode.class);
         for (StreamingSoundInstance stream : streams.values()) {
             ChannelMode mode = stream.getChannelMode();
             if (mode != null) modes.add(mode);
         }
-        surroundLayout = com.nachtraben.soundstage.core.SurroundDownmix.Layout.of(modes);
+        surroundLayout = SurroundDownmix.Layout.of(modes);
     }
 
     private OpusCodec.Decoder frontDecoder;
     private OpusCodec.Decoder centreDecoder;
     private OpusCodec.Decoder rearDecoder;
 
-    public short[] decodeSurround(com.nachtraben.soundstage.network.AudioPacket.SurroundBlock block) {
+    public short[] decodeSurround(AudioPacket.SurroundBlock block) {
         if (block == null) return null;
         if (frontDecoder == null) {
             frontDecoder = new OpusCodec.Decoder();
@@ -476,9 +471,9 @@ public class ClientAudioReceiver {
             return null;
         }
         int samples = front.length / 4;
-        java.nio.ShortBuffer f = java.nio.ByteBuffer.wrap(front).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer();
-        java.nio.ShortBuffer c = java.nio.ByteBuffer.wrap(centre).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer();
-        java.nio.ShortBuffer r = java.nio.ByteBuffer.wrap(rear).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer();
+        ShortBuffer f = ByteBuffer.wrap(front).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
+        ShortBuffer c = ByteBuffer.wrap(centre).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
+        ShortBuffer r = ByteBuffer.wrap(rear).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
         short[] six = new short[samples * 6];
         for (int s = 0; s < samples; s++) {
             six[s * 6] = f.get(s * 2);

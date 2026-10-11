@@ -1,30 +1,53 @@
 package com.nachtraben.soundstage.block;
 
+import com.mojang.serialization.MapCodec;
+import com.nachtraben.soundstage.audio.AudioManagerState;
+import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
+import com.nachtraben.soundstage.block.speaker.SpeakerFinish;
 import com.nachtraben.soundstage.client.SoundstageClientInit;
+import com.nachtraben.soundstage.core.PlacementFacing;
 import com.nachtraben.soundstage.item.SpeakerLinkItem;
 import com.nachtraben.soundstage.registry.ModBlockEntities;
+import com.nachtraben.soundstage.util.ItemData;
+import com.nachtraben.soundstage.util.ItemUse;
+import com.nachtraben.soundstage.util.PlayerMessage;
+import com.nachtraben.soundstage.util.WorldAccess;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
-import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.level.block.Block;
-import com.mojang.serialization.MapCodec;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
 
 public class ReceiverBlock extends BaseEntityBlock {
     public static final IntegerProperty ROTATION = BlockStateProperties.ROTATION_16;
-    protected static final net.minecraft.world.phys.shapes.VoxelShape SHAPE = Block.box(0, 0, 0, 16, 6, 16);
+    protected static final VoxelShape SHAPE = Block.box(0, 0, 0, 16, 6, 16);
 
     @Override
-    public net.minecraft.world.phys.shapes.VoxelShape getShape(BlockState state, net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.shapes.CollisionContext context) {
+    public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         return SHAPE;
     }
 
@@ -44,9 +67,8 @@ public class ReceiverBlock extends BaseEntityBlock {
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         float yaw = context.getRotation();
-        if (com.nachtraben.soundstage.RigStaging.fault("placement-not-toward-placer")) yaw = -yaw;
         return this.defaultBlockState().setValue(ROTATION,
-                com.nachtraben.soundstage.core.PlacementFacing.rotationToward(yaw, 4));
+                PlacementFacing.rotationToward(yaw, 4));
     }
 
     @Override
@@ -68,18 +90,21 @@ public class ReceiverBlock extends BaseEntityBlock {
         //?}
     }
 
-    @org.jetbrains.annotations.Nullable
+    @Nullable
     @Override
-    public <T extends BlockEntity> net.minecraft.world.level.block.entity.BlockEntityTicker<T> getTicker(Level level, BlockState state, net.minecraft.world.level.block.entity.BlockEntityType<T> type) {
-        return createTickerHelper(type, ModBlockEntities.RECEIVER_BLOCK_ENTITY.get(), (lvl, p, s, be) -> be.tick(lvl, p, s));
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state,
+            BlockEntityType<T> type) {
+        return createTickerHelper(type, ModBlockEntities.RECEIVER_BLOCK_ENTITY.get(),
+                (lvl, p, s, be) -> be.tick(lvl, p, s));
     }
-    
+
     @Override
     //? if >=1.21.11 {
     /*protected net.minecraft.world.item.ItemStack getCloneItemStack(net.minecraft.world.level.LevelReader level,
-                                                                   BlockPos pos, BlockState state, boolean includeData) {
+                                                                   BlockPos pos, BlockState state,
+                                                                   boolean includeData) {
     *///?} else if >=1.20.5 {
-    public net.minecraft.world.item.ItemStack getCloneItemStack(net.minecraft.world.level.LevelReader level,
+    public ItemStack getCloneItemStack(net.minecraft.world.level.LevelReader level,
                                                                 BlockPos pos, BlockState state) {
     //?} else {
     /*public net.minecraft.world.item.ItemStack getCloneItemStack(net.minecraft.world.level.BlockGetter level,
@@ -88,16 +113,17 @@ public class ReceiverBlock extends BaseEntityBlock {
         //? if >=1.21.11 {
         /*net.minecraft.world.item.ItemStack stack = super.getCloneItemStack(level, pos, state, includeData);
         *///?} else {
-        net.minecraft.world.item.ItemStack stack = super.getCloneItemStack(level, pos, state);
+        ItemStack stack = super.getCloneItemStack(level, pos, state);
         //?}
         if (level.getBlockEntity(pos) instanceof ReceiverBlockEntity receiver) {
-            com.nachtraben.soundstage.util.ItemData.setFinish(stack, receiver.getFinish());
+            ItemData.setFinish(stack, receiver.getFinish());
         }
         return stack;
     }
 
     @Override
-    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @org.jetbrains.annotations.Nullable net.minecraft.world.entity.LivingEntity placer, net.minecraft.world.item.ItemStack stack) {
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer,
+            ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (!level.isClientSide() && placer instanceof Player player) {
             BlockEntity entity = level.getBlockEntity(pos);
@@ -110,42 +136,44 @@ public class ReceiverBlock extends BaseEntityBlock {
             }
         }
     }
-    
+
     //? if >=1.20.5 {
     @Override
     //?}
     //? if >=1.21.11 || <1.20.5 {
     /*protected InteractionResult useItemOn(net.minecraft.world.item.ItemStack stack,
     *///?} else {
-    protected net.minecraft.world.ItemInteractionResult useItemOn(net.minecraft.world.item.ItemStack stack,
+    protected net.minecraft.world.ItemInteractionResult useItemOn(ItemStack stack,
     //?}
-            BlockState state, Level level, BlockPos pos, Player player, net.minecraft.world.InteractionHand hand,
+            BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand,
             BlockHitResult hit) {
-        var skip = com.nachtraben.soundstage.util.ItemUse.PASS;
-        if (!(stack.getItem() instanceof net.minecraft.world.item.BlockItem blockItem)
-                || !com.nachtraben.soundstage.block.speaker.SpeakerFinish.isCasingMaterial(blockItem.getBlock())
+        var skip = ItemUse.PASS;
+        if (!(stack.getItem() instanceof BlockItem blockItem)
+                || !SpeakerFinish.isCasingMaterial(blockItem.getBlock())
                 || !(level.getBlockEntity(pos) instanceof ReceiverBlockEntity receiver)) {
             return skip;
         }
         if (level.isClientSide()) {
-            return com.nachtraben.soundstage.util.ItemUse.SUCCESS;
+            return ItemUse.SUCCESS;
         }
         if (!receiver.mayControl(player)) {
-            com.nachtraben.soundstage.util.PlayerMessage.actionBar(player,
-                    net.minecraft.network.chat.Component.literal("Receiver is locked!"));
-            return com.nachtraben.soundstage.util.ItemUse.CONSUME;
+            PlayerMessage.actionBar(player,
+                    Component.literal("Receiver is locked!"));
+            return ItemUse.CONSUME;
         }
         receiver.setFinish(receiver.getFinish().withCasing(blockItem.getBlock()));
         level.playSound(null, pos, blockItem.getBlock().defaultBlockState().getSoundType().getPlaceSound(),
-                net.minecraft.sounds.SoundSource.BLOCKS, 1.0f, 0.9f);
-        return com.nachtraben.soundstage.util.ItemUse.SUCCESS;
+                SoundSource.BLOCKS, 1.0f, 0.9f);
+        return ItemUse.SUCCESS;
     }
 
     //? if >=1.20.5 {
     @Override
     //?}
-    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
-        if (player.getMainHandItem().getItem() instanceof SpeakerLinkItem || player.getOffhandItem().getItem() instanceof SpeakerLinkItem) {
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
+            BlockHitResult hitResult) {
+        if (player.getMainHandItem().getItem() instanceof SpeakerLinkItem
+                || player.getOffhandItem().getItem() instanceof SpeakerLinkItem) {
             return InteractionResult.PASS;
         }
         BlockEntity entity = level.getBlockEntity(pos);
@@ -160,7 +188,8 @@ public class ReceiverBlock extends BaseEntityBlock {
     public java.util.List<net.minecraft.world.item.ItemStack> getDrops(BlockState state,
             net.minecraft.world.level.storage.loot.LootParams.Builder params) {
         java.util.List<net.minecraft.world.item.ItemStack> drops = super.getDrops(state, params);
-        if (params.getOptionalParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.BLOCK_ENTITY)
+        if (params.getOptionalParameter(
+                net.minecraft.world.level.storage.loot.parameters.LootContextParams.BLOCK_ENTITY)
                 instanceof ReceiverBlockEntity receiver) {
             for (net.minecraft.world.item.ItemStack drop : drops) {
                 if (drop.is(asItem())) com.nachtraben.soundstage.util.ItemData.setFinish(drop, receiver.getFinish());
@@ -174,13 +203,14 @@ public class ReceiverBlock extends BaseEntityBlock {
     /*@Override
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player,
                                  net.minecraft.world.InteractionHand hand, BlockHitResult hit) {
-        return com.nachtraben.soundstage.util.ItemUse.use(this::useItemOn, this::useWithoutItem, state, level, pos, player, hand, hit);
+        return com.nachtraben.soundstage.util.ItemUse.use(this::useItemOn, this::useWithoutItem, state, level, pos,
+                player, hand, hit);
     }
     *///?}
 
     public static void onReceiverRemoved(Level level, BlockPos pos) {
-        if (!(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) return;
-        com.nachtraben.soundstage.audio.AudioManagerState.removePlayer(pos, serverLevel);
+        if (!(level instanceof ServerLevel serverLevel)) return;
+        AudioManagerState.removePlayer(pos, serverLevel);
         unlinkSpeakers(level, pos);
         unlinkScreens(level, pos);
     }
@@ -197,9 +227,9 @@ public class ReceiverBlock extends BaseEntityBlock {
 
     private static void unlinkSpeakers(Level level, BlockPos pos) {
         if (!(level.getBlockEntity(pos) instanceof ReceiverBlockEntity cbe)) return;
-        for (BlockPos speakerPos : new java.util.ArrayList<>(cbe.getSpeakers())) {
-            if (com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, speakerPos)
-                    instanceof com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity speaker
+        for (BlockPos speakerPos : new ArrayList<>(cbe.getSpeakers())) {
+            if (WorldAccess.blockEntityIfLoaded(level, speakerPos)
+                    instanceof SpeakerBlockEntity speaker
                     && pos.equals(speaker.getReceiverPos())) {
                 speaker.setReceiverPos(null);
                 level.sendBlockUpdated(speakerPos, speaker.getBlockState(), speaker.getBlockState(), 3);
@@ -211,8 +241,8 @@ public class ReceiverBlock extends BaseEntityBlock {
 
     private static void unlinkScreens(Level level, BlockPos pos) {
         if (!(level.getBlockEntity(pos) instanceof ReceiverBlockEntity cbe)) return;
-        for (BlockPos screenPos : new java.util.ArrayList<>(cbe.getScreens())) {
-            if (com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, screenPos)
+        for (BlockPos screenPos : new ArrayList<>(cbe.getScreens())) {
+            if (WorldAccess.blockEntityIfLoaded(level, screenPos)
                     instanceof ScreenBlockEntity screen
                     && pos.equals(screen.getReceiverPos())) {
                 screen.setReceiverPos(null);

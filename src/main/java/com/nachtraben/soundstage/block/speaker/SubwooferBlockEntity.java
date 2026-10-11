@@ -1,8 +1,8 @@
 package com.nachtraben.soundstage.block.speaker;
 
-import com.nachtraben.soundstage.core.ConeExcursionModel;
 import com.nachtraben.soundstage.registry.ModBlockEntities;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 public class SubwooferBlockEntity extends SpeakerBlockEntity {
@@ -13,6 +13,6 @@ public class SubwooferBlockEntity extends SpeakerBlockEntity {
 
     @Override
     protected SpeakerFinish defaultFinish() {
-        return SpeakerFinish.DEFAULT.withGrille(net.minecraft.world.level.block.Blocks.BLACK_WOOL);
+        return SpeakerFinish.DEFAULT.withGrille(Blocks.BLACK_WOOL);
     }
 }

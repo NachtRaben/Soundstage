@@ -1,5 +1,8 @@
 package com.nachtraben.soundstage.client.gui;
 
+import com.nachtraben.soundstage.client.audio.LinuxShareOutput;
+import com.nachtraben.soundstage.client.audio.LiveInputCapture;
+import com.nachtraben.soundstage.client.audio.LiveInputClient;
 import dev.armadeus.armalib.core.ui.Theme;
 import dev.armadeus.armalib.ui.ScrollingText;
 import dev.armadeus.armalib.ui.UiButton;
@@ -8,17 +11,18 @@ import dev.armadeus.armalib.ui.UiGraphics;
 import dev.armadeus.armalib.ui.UiIcon;
 import dev.armadeus.armalib.ui.UiScreen;
 import dev.armadeus.armalib.ui.UiText;
-import com.nachtraben.soundstage.client.audio.LinuxShareOutput;
-import com.nachtraben.soundstage.client.audio.LiveInputCapture;
-import com.nachtraben.soundstage.client.audio.LiveInputClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.util.Mth;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 public class LiveInputScreen extends UiScreen {
     static final Theme THEME = ScreenTheme.THEME;
@@ -42,7 +46,7 @@ public class LiveInputScreen extends UiScreen {
     private int maxScroll;
     private UiButton shareButton;
     private UiButton outputButton;
-    private java.util.concurrent.CompletableFuture<LinuxShareOutput.Result> outputPending;
+    private CompletableFuture<LinuxShareOutput.Result> outputPending;
     private int awaitingMonitorTicks;
     private Component outputStatus;
     private int outputStatusColour;
@@ -50,7 +54,8 @@ public class LiveInputScreen extends UiScreen {
     private long lastSoundMillis;
 
     public LiveInputScreen(BlockPos receiverPos, Screen parent) {
-        super(Component.translatable("gui.soundstage.share.title"), UiIcon.SHARE, THEME, null, WINDOW_WIDTH, WINDOW_HEIGHT);
+        super(Component.translatable("gui.soundstage.share.title"), UiIcon.SHARE, THEME, null, WINDOW_WIDTH,
+                WINDOW_HEIGHT);
         this.receiverPos = receiverPos;
         this.parent = parent;
     }
@@ -69,11 +74,13 @@ public class LiveInputScreen extends UiScreen {
         }).label(refresh));
         left += refreshWidth + 4;
         if (linux) {
-            int outputWidth = UiButton.widthFor(Component.translatable("gui.soundstage.share.output_create"), false, 0, 8);
+            int outputWidth =
+                    UiButton.widthFor(Component.translatable("gui.soundstage.share.output_create"), false, 0, 8);
             outputButton = new UiButton(THEME, left, buttonY, outputWidth, 17, UiButton.Look.PILL, () -> {
                 outputPending = LinuxShareOutput.create();
                 showOutputStatus(Component.translatable("gui.soundstage.share.output_creating"), THEME.muted());
-            }).label(this::outputLabel).enabled(() -> outputPending == null && awaitingMonitorTicks == 0 && !outputListed());
+            }).label(this::outputLabel).enabled(() -> outputPending == null && awaitingMonitorTicks == 0
+                    && !outputListed());
             this.addRenderableWidget(outputButton);
         }
         int shareWidth = Math.max(UiButton.widthFor(Component.translatable("gui.soundstage.share.start"), true, 10, 8),
@@ -121,7 +128,9 @@ public class LiveInputScreen extends UiScreen {
 
     private Component shareLabel() {
         if (LiveInputClient.isSharingTo(receiverPos)) return Component.translatable("gui.soundstage.share.stop");
-        if (LiveInputClient.state() == LiveInputClient.State.STARTING) return Component.translatable("gui.soundstage.share.waiting");
+        if (LiveInputClient.state() == LiveInputClient.State.STARTING) {
+            return Component.translatable("gui.soundstage.share.waiting");
+        }
         return Component.translatable("gui.soundstage.share.start");
     }
 
@@ -130,8 +139,11 @@ public class LiveInputScreen extends UiScreen {
     }
 
     private Component outputLabel() {
-        if (outputPending != null || awaitingMonitorTicks > 0) return Component.translatable("gui.soundstage.share.output_working");
-        return Component.translatable(outputListed() ? "gui.soundstage.share.output_listed" : "gui.soundstage.share.output_create");
+        if (outputPending != null || awaitingMonitorTicks > 0) {
+            return Component.translatable("gui.soundstage.share.output_working");
+        }
+        return Component.translatable(outputListed() ? "gui.soundstage.share.output_listed"
+                : "gui.soundstage.share.output_create");
     }
 
     private void showOutputStatus(Component status, int colour) {
@@ -174,13 +186,14 @@ public class LiveInputScreen extends UiScreen {
         int y = panelY();
         heading(g, Component.translatable("gui.soundstage.share.devices"), left(), y + 31, right());
 
-        UiDraw.roundRect(g, x + 10, y + LIST_TOP - 2, WINDOW_WIDTH - 20, LIST_BOTTOM - LIST_TOP + 4, 4, THEME.surface());
+        UiDraw.roundRect(g, x + 10, y + LIST_TOP - 2, WINDOW_WIDTH - 20, LIST_BOTTOM - LIST_TOP + 4, 4,
+                THEME.surface());
         String chosen = LiveInputClient.device();
         g.enableScissor(x + 10, y + LIST_TOP, x + WINDOW_WIDTH - 10, y + LIST_BOTTOM);
         int rowY = y + LIST_TOP - (int) scrollOffset;
         boolean anyHovered = false;
         for (String device : devices) {
-            boolean selected = java.util.Objects.equals(device, chosen);
+            boolean selected = Objects.equals(device, chosen);
             boolean hovered = mouseX >= x + 10 && mouseX < x + WINDOW_WIDTH - 10
                     && mouseY >= rowY && mouseY < rowY + ROW_HEIGHT - 1
                     && mouseY >= y + LIST_TOP && mouseY < y + LIST_BOTTOM;
@@ -236,7 +249,8 @@ public class LiveInputScreen extends UiScreen {
             status = Component.translatable("gui.soundstage.share.sharing_here");
             statusColour = THEME.success();
         } else if (LiveInputClient.state() == LiveInputClient.State.SHARING && LiveInputClient.target() != null) {
-            status = Component.translatable("gui.soundstage.share.sharing_elsewhere", LiveInputClient.target().toShortString());
+            status = Component.translatable("gui.soundstage.share.sharing_elsewhere",
+                    LiveInputClient.target().toShortString());
             statusColour = THEME.warm();
         } else if (LiveInputClient.state() == LiveInputClient.State.STARTING) {
             status = Component.translatable("gui.soundstage.share.waiting");
@@ -254,7 +268,7 @@ public class LiveInputScreen extends UiScreen {
     }
 
     private static Component hintText() {
-        net.minecraft.network.chat.MutableComponent hint = Component.translatable("gui.soundstage.share.hint");
+        MutableComponent hint = Component.translatable("gui.soundstage.share.hint");
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         String tip = LinuxShareOutput.applies() ? "gui.soundstage.share.tip.linux"
                 : os.contains("win") ? "gui.soundstage.share.tip.windows"
@@ -296,7 +310,7 @@ public class LiveInputScreen extends UiScreen {
         if (mouseY < y + LIST_TOP || mouseY > y + LIST_BOTTOM) {
             return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
-        scrollOffset = net.minecraft.util.Mth.clamp(scrollOffset - scrollY * ROW_HEIGHT, 0, maxScroll);
+        scrollOffset = Mth.clamp(scrollOffset - scrollY * ROW_HEIGHT, 0, maxScroll);
         return true;
     }
 

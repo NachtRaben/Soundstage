@@ -1,19 +1,27 @@
 package com.nachtraben.soundstage.audio.media;
 
+import com.nachtraben.soundstage.audio.video.SoundChoices;
 import com.nachtraben.soundstage.audio.video.VideoCapableTrack;
 import com.nachtraben.soundstage.audio.video.VideoSink;
 import com.nachtraben.soundstage.config.SoundstageConfig;
+import com.nachtraben.soundstage.core.video.AudioChoice;
 import com.nachtraben.soundstage.core.video.FfmpegCommand;
 import com.nachtraben.soundstage.core.video.LoopbackRelay;
 import com.nachtraben.soundstage.core.video.MediaProbe;
+import com.nachtraben.soundstage.core.video.PictureSize;
+import com.nachtraben.soundstage.core.video.SilentVideoProbe;
+import com.nachtraben.soundstage.core.video.StillImage;
+import com.nachtraben.soundstage.core.video.StillImageProbe;
 import com.nachtraben.soundstage.core.video.WebMediaFetch;
 import com.sedmelluq.discord.lavaplayer.container.MediaContainerDescriptor;
+import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioTrack;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.tools.Units;
-import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -23,22 +31,57 @@ import java.util.Set;
 
 public final class WebMediaTrack extends HttpAudioTrack implements VideoCapableTrack {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     static final long SHORT_END_MARGIN_MILLIS = 2_000;
 
     static final Set<String> PICTURE_CONTAINERS = Set.of("mp4", "matroska/webm");
 
+    static final String NEEDS_FFMPEG = "This server can't play that video.";
+
+    private enum Waits {
+        NOTHING,
+        SCREEN,
+        PLACE
+    }
+
     private final WebMediaSourceManager sourceManager;
     private final FfmpegRuns runs;
     private final String describes;
+    private volatile boolean awaitingScreen;
+    private volatile boolean awaitingPlace;
+    private volatile boolean throughFfmpeg;
+    private volatile boolean copyPlaying;
+    private final TrackAudioChoice audio;
 
     WebMediaTrack(AudioTrackInfo trackInfo, MediaContainerDescriptor containerTrackFactory,
                   WebMediaSourceManager sourceManager) {
         super(trackInfo, containerTrackFactory, sourceManager);
         this.sourceManager = sourceManager;
         this.describes = "web media file from " + host(trackInfo.identifier);
-        this.runs = new FfmpegRuns(describes);
+        this.runs = new FfmpegRuns(describes, StillImageProbe.type(containerTrackFactory) != null);
+        this.audio = new TrackAudioChoice(trackInfo.identifier);
+    }
+
+    @Override
+    public void setSoundChoices(SoundChoices choices) {
+        audio.host(choices);
+    }
+
+    @Override
+    public List<AudioChoice.Entry> audioEntries() {
+        return audio.entries();
+    }
+
+    @Override
+    public String audioKey() {
+        return audio.key();
+    }
+
+    @Override
+    public PictureRetake applyAudio() {
+        if (!audio.reapply()) return PictureRetake.NONE;
+        return copyPlaying ? PictureRetake.SEEK : PictureRetake.REPLAY;
     }
 
     @Override
@@ -47,8 +90,8 @@ public final class WebMediaTrack extends HttpAudioTrack implements VideoCapableT
     }
 
     @Override
-    public void setTargetHeight(int height) {
-        runs.setTargetHeight(height);
+    public void setPictureTarget(PictureSize.Target target) {
+        runs.setPictureTarget(target);
     }
 
     @Override
@@ -56,22 +99,93 @@ public final class WebMediaTrack extends HttpAudioTrack implements VideoCapableT
         return runs.surroundPending();
     }
 
+    boolean soundThroughFfmpeg() {
+        return SilentVideoProbe.throughFfmpeg(getContainerTrackFactory());
+    }
+
+    @Override
+    public boolean isStill() {
+        return StillImageProbe.type(getContainerTrackFactory()) != null;
+    }
+
+    @Override
+    public PictureRetake pictureRetake() {
+        if (isStill() || soundThroughFfmpeg() || throughFfmpeg) {
+            FfmpegRuns.Step step = isSeekable() ? runs.judgePace() : FfmpegRuns.Step.NONE;
+            if (step == FfmpegRuns.Step.NO_PICTURE) runs.givePictureUp();
+            boolean again = step != FfmpegRuns.Step.NONE || runs.picturePending() || runs.placeFreed();
+            if (!again) return PictureRetake.NONE;
+            return isStill() || !isSeekable() ? PictureRetake.REPLAY : PictureRetake.SEEK;
+        }
+        FfmpegRuns.Step step = runs.judgePace();
+        if (step == FfmpegRuns.Step.SMALLER) return PictureRetake.SEEK;
+        if (step == FfmpegRuns.Step.NO_PICTURE) {
+            runs.giveCopyUp();
+            return PictureRetake.NONE;
+        }
+        VideoSink sink = runs.videoSink();
+        boolean showing = sink != null && sink.hasScreens() && sink.wantsPicture();
+        if (awaitingScreen && showing) return PictureRetake.REPLAY;
+        return awaitingPlace && showing && runs.takePlace() ? PictureRetake.REPLAY : PictureRetake.NONE;
+    }
+
     @Override
     public void process(LocalAudioTrackExecutor executor) throws Exception {
+        if (isStill()) {
+            showStill(executor);
+            return;
+        }
+        if (soundThroughFfmpeg()) {
+            playThroughFfmpeg(executor);
+            return;
+        }
         VideoSink sink = runs.videoSink();
         URI url = fetchable(trackInfo.identifier);
-        if (sink == null || !sink.hasScreens() || !sink.wantsPicture() || !SoundstageConfig.enableVideo() || trackInfo.isStream
-                || url == null || !mayCarryPicture(getContainerTrackFactory())) {
+        boolean pictureMayCome = sink != null && sink.wantsPicture() && SoundstageConfig.enableVideo()
+                && !trackInfo.isStream && url != null && mayCarryPicture(getContainerTrackFactory());
+        boolean screen = sink != null && sink.wantsPicture() && sink.hasScreens() && SoundstageConfig.enableVideo();
+        boolean languages = audio.wanted() && !trackInfo.isStream && url != null
+                && mayCarryPicture(getContainerTrackFactory()) && sourceManager.streaming().ffmpegAvailable();
+        if (!screen && languages) {
+            playLanguages(executor, pictureMayCome ? Waits.SCREEN : Waits.NOTHING);
+            return;
+        }
+        if (!pictureMayCome) {
             playSoundOnly(executor);
             return;
         }
         WebMediaSourceManager.Streaming streaming = sourceManager.streaming();
         boolean ffmpeg = streaming.ffmpegAvailable();
         if (runs.isStopped()) return;
+        if (!sink.hasScreens()) {
+            if (!ffmpeg) {
+                playSoundOnly(executor);
+                return;
+            }
+            awaitingScreen = true;
+            super.process(executor);
+            return;
+        }
         if (!ffmpeg) {
             LOGGER.info("Soundstage: {} plays with sound only: ffmpeg is not available.", describes);
             SoundOnlyFallbacks.report(trackInfo.identifier, "ffmpeg is not available");
             playSoundOnly(executor);
+            return;
+        }
+        if (runs.pictureGivenUp()) {
+            if (languages) {
+                playLanguages(executor, Waits.NOTHING);
+            } else {
+                playSoundOnly(executor);
+            }
+            return;
+        }
+        if (!runs.takePlace()) {
+            if (languages) {
+                playLanguages(executor, Waits.PLACE);
+            } else {
+                playOwnPath(executor, Waits.PLACE);
+            }
             return;
         }
 
@@ -90,6 +204,8 @@ public final class WebMediaTrack extends HttpAudioTrack implements VideoCapableT
             } else {
                 LOGGER.info("Soundstage: {} plays its picture through ffmpeg, read through a loopback relay.",
                         describes);
+                audio.begin(media.audioChoices());
+                copyPlaying = true;
                 runs.play(executor, new Copies(relay.url(), media, toneMap(streaming, media)));
                 return;
             }
@@ -108,6 +224,117 @@ public final class WebMediaTrack extends HttpAudioTrack implements VideoCapableT
         } else if (soundOnly != null) {
             LOGGER.info("Soundstage: {} plays with sound only: {}.", describes, soundOnly);
             SoundOnlyFallbacks.report(trackInfo.identifier, soundOnly);
+        }
+        playSoundOnly(executor);
+    }
+
+    private void showStill(LocalAudioTrackExecutor executor) throws Exception {
+        URI url = fetchable(trackInfo.identifier);
+        if (url == null) {
+            throw new FriendlyException("That URL cannot be played.", FriendlyException.Severity.COMMON, null);
+        }
+        WebMediaSourceManager.Streaming streaming = sourceManager.streaming();
+        if (!streaming.ffmpegAvailable()) {
+            throw new FriendlyException(MediaFolderSourceManager.IMAGES_NEED_FFMPEG, FriendlyException.Severity.COMMON,
+                    null);
+        }
+        StillImage.Header header = sourceManager.readStill(url);
+        if (header == null || header.type() != StillImageProbe.type(getContainerTrackFactory())) {
+            throw new FriendlyException("That URL no longer serves the image it did.",
+                    FriendlyException.Severity.COMMON, null);
+        }
+        if (!header.fits()) {
+            throw new FriendlyException(StillImageProbe.TOO_LARGE, FriendlyException.Severity.COMMON, null);
+        }
+        if (runs.isStopped()) return;
+        if (!runs.pictureMayCome()) runs.abandonPicture();
+        LOGGER.debug("Soundstage: an image from {} ({}, {}x{}) shows on a silent soundtrack, read through a loopback "
+                + "relay.", host(trackInfo.identifier), header.type(), header.width(), header.height());
+        try (LoopbackRelay relay = sourceManager.relay(url, describes)) {
+            runs.play(executor, new StillCopies(header,
+                    copy -> streaming.still(relay.url(), describes, header.type(), copy),
+                    () -> streaming.silence(describes, 0, MediaProbe.UNKNOWN_DURATION)));
+        }
+    }
+
+    private void playThroughFfmpeg(LocalAudioTrackExecutor executor) throws Exception {
+        playThroughFfmpeg(executor, false);
+    }
+
+    private boolean playThroughFfmpeg(LocalAudioTrackExecutor executor, boolean languages) throws Exception {
+        URI url = fetchable(trackInfo.identifier);
+        if (url == null) {
+            throw new FriendlyException("That URL cannot be played.", FriendlyException.Severity.COMMON, null);
+        }
+        WebMediaSourceManager.Streaming streaming = sourceManager.streaming();
+        if (!streaming.ffmpegAvailable()) {
+            throw new FriendlyException(NEEDS_FFMPEG, FriendlyException.Severity.COMMON, null);
+        }
+        try (LoopbackRelay relay = sourceManager.relay(url, describes)) {
+            MediaProbe media = streaming.probe(relay.url(), describes);
+            if (runs.isStopped()) return true;
+            if (media == null) {
+                throw new FriendlyException(NEEDS_FFMPEG, FriendlyException.Severity.COMMON, null);
+            }
+            if (!media.hasVideo() && !media.hasAudio()) {
+                throw new FriendlyException("That file has no picture or sound to play.",
+                        FriendlyException.Severity.COMMON, null);
+            }
+            int entries = media.audioEntries().size();
+            if (languages && entries < 2) {
+                audio.begin(media.audioChoices());
+                return false;
+            }
+            if (!media.hasVideo() || !runs.pictureMayCome()) runs.abandonPicture();
+            String key = audio.begin(media.audioChoices());
+            throughFfmpeg = true;
+            copyPlaying = true;
+            LOGGER.info("Soundstage: {} plays through ffmpeg{}, read through a loopback relay.", describes,
+                    !media.hasAudio() ? " on a silent soundtrack" : entries > 1
+                            ? " in " + AudioChoice.labelOf(key, media.audioChoices())
+                            + ", one of its " + entries + " audio tracks" : ", which reads its sound");
+            runs.play(executor, new Copies(relay.url(), media, media.hasVideo() && toneMap(streaming, media), true));
+            return true;
+        }
+    }
+
+    private void playLanguages(LocalAudioTrackExecutor executor, Waits waits) throws Exception {
+        Throwable failure;
+        boolean played;
+        try {
+            played = playThroughFfmpeg(executor, true);
+            failure = null;
+        } catch (Exception | LinkageError e) {
+            played = false;
+            failure = e;
+        }
+        if (played || runs.isStopped()) return;
+        if (failure == null) {
+            playOwnPath(executor, waits);
+            return;
+        }
+        throughFfmpeg = false;
+        copyPlaying = false;
+        audio.withdraw();
+        long resumeAt = runs.resumePosition(executor);
+        String why = reasons(failure);
+        LOGGER.warn("Soundstage: {} plays on in the audio track LavaPlayer reads, from {} ms: {}", describes, resumeAt,
+                why);
+        SoundOnlyFallbacks.report(trackInfo.identifier, why);
+        if (resumeAt > 0) executor.setPosition(resumeAt);
+        playOwnPath(executor, waits);
+    }
+
+    private void playOwnPath(LocalAudioTrackExecutor executor, Waits waits) throws Exception {
+        if (waits == Waits.SCREEN) {
+            awaitingScreen = true;
+            super.process(executor);
+            return;
+        }
+        if (waits == Waits.PLACE) {
+            LOGGER.info("Soundstage: {} plays with sound only for now: this server has no room for another picture "
+                    + "yet; its picture comes when there is.", describes);
+            awaitingPlace = true;
         }
         playSoundOnly(executor);
     }
@@ -137,7 +364,7 @@ public final class WebMediaTrack extends HttpAudioTrack implements VideoCapableT
                 && PICTURE_CONTAINERS.contains(container.probe.getName());
     }
 
-    private static URI fetchable(String identifier) {
+    static URI fetchable(String identifier) {
         try {
             URI url = new URI(identifier);
             return WebMediaFetch.isFetchable(url) ? url : null;
@@ -182,28 +409,42 @@ public final class WebMediaTrack extends HttpAudioTrack implements VideoCapableT
         private final URI relay;
         private final MediaProbe media;
         private final boolean toneMap;
+        private final boolean pictureOptional;
 
         Copies(URI relay, MediaProbe media, boolean toneMap) {
+            this(relay, media, toneMap, false);
+        }
+
+        Copies(URI relay, MediaProbe media, boolean toneMap, boolean pictureOptional) {
             this.relay = relay;
             this.media = media;
             this.toneMap = toneMap;
-        }
-
-        @Override
-        public Ffmpeg.Transcode start(long startMillis, int maxHeight) throws IOException {
-            return start(startMillis, maxHeight, false);
+            this.pictureOptional = pictureOptional;
         }
 
         @Override
         public boolean hasSurroundTrack() {
-            return media.surroundSound().isPresent();
+            return media.withAudio(audio.key()).surroundSound().isPresent();
         }
 
         @Override
-        public Ffmpeg.Transcode start(long startMillis, int maxHeight, boolean surround) throws IOException {
+        public boolean pictureOptional() {
+            return pictureOptional;
+        }
+
+        @Override
+        public Ffmpeg.Transcode start(long startMillis, FfmpegRuns.Sizing sizing, boolean surround, boolean picture)
+                throws IOException {
             try {
-                return sourceManager.streaming().start(relay, describes, startMillis, maxHeight,
-                        surround ? media.withSurround() : media, toneMap);
+                WebMediaSourceManager.Streaming streaming = sourceManager.streaming();
+                if (!picture && !media.hasAudio()) {
+                    return streaming.silence(describes, startMillis, media.durationMillis());
+                }
+                MediaProbe chosen = media.withAudio(audio.key());
+                MediaProbe probe = picture ? chosen : chosen.withoutPicture();
+                return streaming.start(relay, describes, startMillis,
+                        picture ? sizing.copy(media.pictureWidth(), media.videoHeight()) : null,
+                        surround ? probe.withSurround() : probe, picture && toneMap);
             } catch (IOException e) {
                 Ffmpeg.forget();
                 throw new IOException("ffmpeg could not be started", e);
@@ -212,7 +453,7 @@ public final class WebMediaTrack extends HttpAudioTrack implements VideoCapableT
 
         @Override
         public boolean hasVideo() {
-            return true;
+            return media.hasVideo();
         }
 
         @Override

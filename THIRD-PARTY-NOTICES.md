@@ -74,6 +74,13 @@ because the native connector's exported symbols are compiled from them.
 | XZ for Java | `org.tukaani:xz:1.12` | 0BSD — Copyright (C) The XZ for Java authors and contributors; `licenses/0BSD-xz-java.txt` | https://tukaani.org/xz/java.html |
 | Noto Sans Medium (`assets/soundstage/font/noto_sans_medium.ttf`, the subtitle font, in this jar) | 2.015 | SIL OFL 1.1 — Copyright 2022 The Noto Project Authors; `licenses/OFL-1.1-noto-sans.txt` | https://github.com/notofonts/latin-greek-cyrillic |
 
+### Code derived from JCodec
+
+Two of Soundstage's own classes are derived from JCodec's source: `com.nachtraben.soundstage.core.video.H264FrameDecoder`
+from its `H264Decoder`, and `com.nachtraben.soundstage.core.video.H264Deblocker` from its `DeblockingFilter`. That
+code is under JCodec's BSD-2-Clause licence, Copyright 2008-2017 JCodecProject. Each of the two files carries the
+notice at its top, and the licence text is in `licenses/BSD-2-Clause-jcodec.txt`.
+
 ### Relocation is a modification
 
 ArmaLib's wraps rewrite the package names of the relocated libraries inside their class files. No

@@ -55,6 +55,8 @@ public final class SoundstageConfig {
     public static String ffmpegPath() { return settings.ffmpegPath(); }
     public static boolean downloadFfmpeg() { return settings.downloadFfmpeg(); }
     public static int maxVideoHeight() { return settings.maxVideoHeight(); }
+    public static int maxPicturesEncoding() { return settings.maxPicturesEncoding(); }
+    public static int imageDisplaySeconds() { return settings.imageDisplaySeconds(); }
     public static boolean allowYoutubeSearch() { return settings.allowYoutubeSearch(); }
 
     public static String getOauthRefreshToken() { return settings.oauthRefreshToken(); }

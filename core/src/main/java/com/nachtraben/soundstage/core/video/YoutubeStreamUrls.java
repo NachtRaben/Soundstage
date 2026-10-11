@@ -1,6 +1,7 @@
 package com.nachtraben.soundstage.core.video;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Locale;
 
 public final class YoutubeStreamUrls {
@@ -14,7 +15,7 @@ public final class YoutubeStreamUrls {
         URI parsed;
         try {
             parsed = new URI(url.toASCIIString());
-        } catch (java.net.URISyntaxException e) {
+        } catch (URISyntaxException e) {
             return false;
         }
         if (!"https".equals(parsed.getScheme()) || parsed.isOpaque()) return false;

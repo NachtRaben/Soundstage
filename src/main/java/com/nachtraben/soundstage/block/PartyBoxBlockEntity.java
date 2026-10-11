@@ -1,22 +1,39 @@
 package com.nachtraben.soundstage.block;
 
-import dev.armadeus.armalib.platform.block.SaveView;
-
+import com.nachtraben.soundstage.audio.AudioManager;
+import com.nachtraben.soundstage.audio.AudioManagerState;
+import com.nachtraben.soundstage.audio.TrackScheduler;
 import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
+import com.nachtraben.soundstage.block.speaker.SpeakerFinish;
+import com.nachtraben.soundstage.core.video.AudioChoice;
+import com.nachtraben.soundstage.core.video.SubtitleChoice;
 import com.nachtraben.soundstage.registry.ModBlockEntities;
+import dev.armadeus.armalib.platform.block.SaveView;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 
 public class PartyBoxBlockEntity extends SpeakerBlockEntity implements IAudioReceiver {
     private String currentTrackData = "";
     private long currentTrackPosition = 0;
-    private final java.util.List<String> queueData = new java.util.ArrayList<>();
+    private final List<String> queueData = new ArrayList<>();
     private int volume = IAudioReceiver.DEFAULT_VOLUME;
     private int loopMode = 0;
     private boolean shuffle = false;
     private boolean isLocked = false;
     private boolean levelling = false;
-    private java.util.UUID ownerUUID = null;
+    private UUID ownerUUID = null;
     private boolean stateRestored = false;
 
     public PartyBoxBlockEntity(BlockPos pos, BlockState state) {
@@ -24,9 +41,9 @@ public class PartyBoxBlockEntity extends SpeakerBlockEntity implements IAudioRec
     }
 
     @Override
-    protected com.nachtraben.soundstage.block.speaker.SpeakerFinish defaultFinish() {
-        return com.nachtraben.soundstage.block.speaker.SpeakerFinish.DEFAULT
-                .withGrille(net.minecraft.world.level.block.Blocks.BLACK_WOOL);
+    protected SpeakerFinish defaultFinish() {
+        return SpeakerFinish.DEFAULT
+                .withGrille(Blocks.BLACK_WOOL);
     }
 
     //? if <1.21.11 {
@@ -50,13 +67,15 @@ public class PartyBoxBlockEntity extends SpeakerBlockEntity implements IAudioRec
     }
     *///?} else if >=1.20.5 {
     @Override
-    protected void saveAdditional(net.minecraft.nbt.CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+    protected void saveAdditional(net.minecraft.nbt.CompoundTag tag,
+            net.minecraft.core.HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         save(SaveView.writer(tag));
     }
 
     @Override
-    protected void loadAdditional(net.minecraft.nbt.CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+    protected void loadAdditional(net.minecraft.nbt.CompoundTag tag,
+            net.minecraft.core.HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         load(SaveView.reader(tag));
     }
@@ -86,10 +105,11 @@ public class PartyBoxBlockEntity extends SpeakerBlockEntity implements IAudioRec
         }
         out.putBoolean("isLocked", isLocked);
         out.putBoolean("levelLoudness", levelling);
+        AudioLanguageField.save(out, audioLanguage);
     }
 
     private void load(SaveView.Reader in) {
-        volume = net.minecraft.util.Mth.clamp(
+        volume = Mth.clamp(
                 in.getInt("volume", IAudioReceiver.DEFAULT_VOLUME),
                 IAudioReceiver.MIN_VOLUME, IAudioReceiver.MAX_VOLUME);
         loopMode = in.getInt("loopMode", 0);
@@ -98,11 +118,10 @@ public class PartyBoxBlockEntity extends SpeakerBlockEntity implements IAudioRec
         currentTrackPosition = in.getLong("currentTrackPosition", 0L);
         queueData.clear();
         queueData.addAll(in.getStringList("queueData"));
-        {
-            ownerUUID = in.getUuid("ownerUUID");
-        }
+        ownerUUID = in.getUuid("ownerUUID");
         isLocked = in.getBoolean("isLocked", false);
         levelling = in.getBoolean("levelLoudness", false);
+        audioLanguage = AudioLanguageField.load(in);
     }
 
     @Override
@@ -123,17 +142,20 @@ public class PartyBoxBlockEntity extends SpeakerBlockEntity implements IAudioRec
 
     public String getCurrentTrackData() { return currentTrackData; }
     public void setCurrentTrackData(String currentTrackData) { this.currentTrackData = currentTrackData; setChanged(); }
-    
+
     @Override
     public BlockPos getReceiverPos() { return this.getBlockPos(); }
-    
+
     public long getCurrentTrackPosition() { return currentTrackPosition; }
-    public void setCurrentTrackPosition(long currentTrackPosition) { this.currentTrackPosition = currentTrackPosition; setChanged(); }
-    public java.util.List<String> getQueueData() { return queueData; }
-    public void setQueueData(java.util.List<String> urls) { this.queueData.clear(); this.queueData.addAll(urls); setChanged(); }
+    public void setCurrentTrackPosition(long currentTrackPosition) {
+        this.currentTrackPosition = currentTrackPosition;
+        setChanged();
+    }
+    public List<String> getQueueData() { return queueData; }
+    public void setQueueData(List<String> urls) { this.queueData.clear(); this.queueData.addAll(urls); setChanged(); }
     public int getVolume() { return volume; }
     public void setVolume(int volume) {
-        int clamped = net.minecraft.util.Mth.clamp(
+        int clamped = Mth.clamp(
                 volume, IAudioReceiver.MIN_VOLUME, IAudioReceiver.MAX_VOLUME);
         if (this.volume == clamped) return;
         this.volume = clamped;
@@ -155,6 +177,23 @@ public class PartyBoxBlockEntity extends SpeakerBlockEntity implements IAudioRec
         syncToClients();
     }
     public boolean isLevelling() { return levelling; }
+
+    private final transient SubtitleChoice.Memory audioChoices =
+            new SubtitleChoice.Memory();
+
+    public SubtitleChoice.Memory audioChoices() { return audioChoices; }
+
+    private volatile String audioLanguage;
+
+    public String audioLanguage() { return audioLanguage; }
+
+    public void setAudioLanguage(String language) {
+        String tag = AudioChoice.languageTag(language);
+        if (Objects.equals(audioLanguage, tag)) return;
+        audioLanguage = tag;
+        setChanged();
+        syncToClients();
+    }
     public void setLevelling(boolean levelling) {
         if (this.levelling == levelling) return;
         this.levelling = levelling;
@@ -170,20 +209,19 @@ public class PartyBoxBlockEntity extends SpeakerBlockEntity implements IAudioRec
     }
 
     private void syncToClients() {
-        if (com.nachtraben.soundstage.RigStaging.fault("no-client-sync")) return;
         if (level != null && !level.isClientSide()) {
             level.sendBlockUpdated(getBlockPos(), getBlockState(), getBlockState(),
-                    net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+                    Block.UPDATE_CLIENTS);
         }
     }
-    public java.util.List<BlockPos> getSpeakers() { return java.util.Collections.singletonList(getBlockPos()); }
+    public List<BlockPos> getSpeakers() { return Collections.singletonList(getBlockPos()); }
 
     @Override
     public void setRemoved() {
         super.setRemoved();
         if (level != null && !level.isClientSide()) {
-            com.nachtraben.soundstage.audio.AudioManagerState
-                    .removePlayer(getBlockPos(), (net.minecraft.server.level.ServerLevel) level);
+            AudioManagerState
+                    .removePlayer(getBlockPos(), (ServerLevel) level);
         }
     }
     public boolean isLocked() { return isLocked; }
@@ -195,34 +233,34 @@ public class PartyBoxBlockEntity extends SpeakerBlockEntity implements IAudioRec
         syncToClients();
     }
 
-    @org.jetbrains.annotations.Nullable
-    public java.util.UUID getOwnerUUID() { return ownerUUID; }
+    @Nullable
+    public UUID getOwnerUUID() { return ownerUUID; }
 
-    public void setOwnerUUID(@org.jetbrains.annotations.Nullable java.util.UUID uuid) {
+    public void setOwnerUUID(@Nullable UUID uuid) {
         this.ownerUUID = uuid;
         setChanged();
     }
 
-    public static void tick(net.minecraft.world.level.Level level, BlockPos pos, BlockState state, PartyBoxBlockEntity be) {
+    public static void tick(Level level, BlockPos pos, BlockState state, PartyBoxBlockEntity be) {
         if (!level.isClientSide()) {
             if (!be.stateRestored) {
                 be.stateRestored = true;
                 if (!be.currentTrackData.isEmpty() || !be.queueData.isEmpty()) {
-                    com.nachtraben.soundstage.audio.AudioManager.get().getOrCreatePlayer(pos, (net.minecraft.server.level.ServerLevel) level);
+                    AudioManager.get().getOrCreatePlayer(pos, (ServerLevel) level);
                 } else if (be.isPlaying()) {
                     be.setPlaying(false);
                 }
             }
             if (level.getGameTime() % 20 == 0) {
-                com.nachtraben.soundstage.audio.TrackScheduler scheduler = com.nachtraben.soundstage.audio.AudioManager.get()
-                        .getScheduler(pos, (net.minecraft.server.level.ServerLevel) level);
+                TrackScheduler scheduler = AudioManager.get()
+                        .getScheduler(pos, (ServerLevel) level);
                 if (scheduler != null) {
                     scheduler.syncMetadata();
                 }
             }
             if (level.getGameTime() % 100 == 0) {
-                com.nachtraben.soundstage.audio.TrackScheduler scheduler = com.nachtraben.soundstage.audio.AudioManager.get()
-                        .getScheduler(pos, (net.minecraft.server.level.ServerLevel) level);
+                TrackScheduler scheduler = AudioManager.get()
+                        .getScheduler(pos, (ServerLevel) level);
                 if (scheduler != null) {
                     scheduler.persistToReceiver();
                 }

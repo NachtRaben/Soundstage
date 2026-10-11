@@ -1,8 +1,10 @@
 package com.nachtraben.soundstage.core;
 
+import com.nachtraben.soundstage.core.video.SilentVideoProbe;
+import com.nachtraben.soundstage.core.video.StillImageProbe;
+import com.sedmelluq.discord.lavaplayer.container.MediaContainer;
 import com.sedmelluq.discord.lavaplayer.container.MediaContainerProbe;
 import com.sedmelluq.discord.lavaplayer.container.MediaContainerRegistry;
-import com.sedmelluq.discord.lavaplayer.container.MediaContainer;
 import com.sedmelluq.discord.lavaplayer.container.playlists.HlsStreamTrack;
 import com.sedmelluq.discord.lavaplayer.container.playlists.M3uPlaylistContainerProbe;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
@@ -75,8 +77,15 @@ public class ScreenedHttpSource extends HttpAudioSourceManager {
 
     private static MediaContainerRegistry registry(HttpInterfaceManager hls) {
         List<MediaContainerProbe> probes = new ArrayList<>();
+        probes.add(new StillImageProbe());
         for (MediaContainerProbe probe : MediaContainer.asList()) {
-            probes.add(probe instanceof M3uPlaylistContainerProbe ? new ScreenedM3uProbe(hls) : probe);
+            if (probe instanceof M3uPlaylistContainerProbe) {
+                probes.add(new ScreenedM3uProbe(hls));
+            } else if (SilentVideoProbe.CONTAINERS.contains(probe.getName())) {
+                probes.add(new SilentVideoProbe(probe));
+            } else {
+                probes.add(probe);
+            }
         }
         return new MediaContainerRegistry(probes);
     }

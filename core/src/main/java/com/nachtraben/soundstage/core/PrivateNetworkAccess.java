@@ -5,6 +5,7 @@ import dev.armadeus.armalib.lavaplayer.shadow.org.apache.http.HttpHost;
 import dev.armadeus.armalib.lavaplayer.shadow.org.apache.http.client.utils.URIUtils;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Locale;
 
 public final class PrivateNetworkAccess {
@@ -16,7 +17,8 @@ public final class PrivateNetworkAccess {
             "Only an operator can play from a private network address on this server.";
 
     public static final String REFUSED_PLATFORM =
-            "The server could not reach that service: its address resolved to a private network. The server log has the details.";
+            "The server could not reach that service: its address resolved to a private network. The server log has "
+                    + "the details.";
 
     public static final String REFUSED_HOST_FORM =
             "That URL's host is not written in a form this server accepts; write the full address or name.";
@@ -42,7 +44,7 @@ public final class PrivateNetworkAccess {
         URI uri;
         try {
             uri = new URI(icy ? "http://" + trimmed.substring(6) : trimmed);
-        } catch (java.net.URISyntaxException e) {
+        } catch (URISyntaxException e) {
             return true;
         }
         String host = uri.getHost();

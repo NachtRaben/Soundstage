@@ -25,9 +25,6 @@ import java.nio.FloatBuffer;
 
     private static final java.util.Map<Integer, Program> PROGRAMS = new java.util.HashMap<>();
 
-    private static long passes;
-    private static long displacedCopies;
-    private static long passNanos;
     private static boolean loggedFirstPass;
 
     private DisplacementPass() {
@@ -35,35 +32,6 @@ import java.nio.FloatBuffer;
 
     static boolean isUsable() {
         return usable && dev.armadeus.armalib.platform.client.render.RenderBackend.isOpenGl();
-    }
-
-    private static boolean enabled = true;
-
-    static void setEnabled(boolean on) {
-        enabled = on;
-    }
-
-    private static final class NoFeedback {
-        static final boolean STAGED = com.nachtraben.soundstage.RigStaging.sessionStages("soundstage:woofer-excursion", "no-feedback");
-
-        static {
-            if (STAGED) {
-                StaticMesh.LOGGER.warn("Soundstage: red control — the suspension is not displaced under a shader pack "
-                        + "(rig soundstage:woofer-excursion, no-feedback)");
-            }
-        }
-    }
-
-    static long passes() {
-        return passes;
-    }
-
-    static long displacedCopies() {
-        return displacedCopies;
-    }
-
-    static long passNanos() {
-        return passNanos;
     }
 
     static final class Source implements AutoCloseable {
@@ -82,8 +50,8 @@ import java.nio.FloatBuffer;
         private boolean closed;
 
         private Source(dev.armadeus.armalib.platform.client.render.RetainedMesh rest, int vertexCount, int stride,
-                       int positionOffset, float[] weights, int weightBuffer,
-                       java.util.function.IntFunction<dev.armadeus.armalib.platform.client.render.RetainedMesh> uploader) {
+                int positionOffset, float[] weights, int weightBuffer,
+                java.util.function.IntFunction<dev.armadeus.armalib.platform.client.render.RetainedMesh> uploader) {
             this.rest = rest;
             this.vertexCount = vertexCount;
             this.stride = stride;
@@ -146,8 +114,9 @@ import java.nio.FloatBuffer;
         }
     }
 
-    static Source create(java.util.function.IntFunction<dev.armadeus.armalib.platform.client.render.RetainedMesh> uploader,
-                         float[] weights, int stride, int positionOffset) {
+    static Source create(
+            java.util.function.IntFunction<dev.armadeus.armalib.platform.client.render.RetainedMesh> uploader,
+            float[] weights, int stride, int positionOffset) {
         dev.armadeus.armalib.platform.client.render.RetainedMesh rest = uploader.apply(1);
         int group = group(stride);
         if (rest.vertexCount() != weights.length || rest.vertexCount() % group != 0 || rest.glVertexBuffer() == 0) {
@@ -161,7 +130,8 @@ import java.nio.FloatBuffer;
             data.put(weights).flip();
             weightBuffer = org.lwjgl.opengl.GL15.glGenBuffers();
             org.lwjgl.opengl.GL15.glBindBuffer(org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER, weightBuffer);
-            org.lwjgl.opengl.GL15.glBufferData(org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER, data, org.lwjgl.opengl.GL15.GL_STATIC_DRAW);
+            org.lwjgl.opengl.GL15.glBufferData(org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER, data,
+                    org.lwjgl.opengl.GL15.GL_STATIC_DRAW);
         } finally {
             org.lwjgl.opengl.GL15.glBindBuffer(org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER, previous);
             org.lwjgl.system.MemoryUtil.memFree(data);
@@ -174,12 +144,12 @@ import java.nio.FloatBuffer;
     }
 
     static void displaceAll(java.util.List<Source> sources) {
-        if (!isUsable() || !enabled || NoFeedback.STAGED) return;
-        long startedAt = System.nanoTime();
+        if (!isUsable()) return;
         int program0 = org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL20.GL_CURRENT_PROGRAM);
         int vertexArray0 = org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL30.GL_VERTEX_ARRAY_BINDING);
         int arrayBuffer0 = org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER_BINDING);
-        int feedbackBuffer0 = org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL30.GL_TRANSFORM_FEEDBACK_BUFFER_BINDING);
+        int feedbackBuffer0 =
+                org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL30.GL_TRANSFORM_FEEDBACK_BUFFER_BINDING);
         boolean discarding0 = org.lwjgl.opengl.GL11.glIsEnabled(org.lwjgl.opengl.GL30.GL_RASTERIZER_DISCARD);
         boolean feedbackBegun = false;
         try {
@@ -203,7 +173,8 @@ import java.nio.FloatBuffer;
                     TRAVEL_UPLOAD.clear();
                     TRAVEL_UPLOAD.put(source.travels, base, count).flip();
                     org.lwjgl.opengl.GL20.glUniform1fv(program.travel, TRAVEL_UPLOAD);
-                    org.lwjgl.opengl.GL30.glBindBufferRange(org.lwjgl.opengl.GL30.GL_TRANSFORM_FEEDBACK_BUFFER, 0, target,
+                    org.lwjgl.opengl.GL30.glBindBufferRange(
+                            org.lwjgl.opengl.GL30.GL_TRANSFORM_FEEDBACK_BUFFER, 0, target,
                             base * copyBytes, count * copyBytes);
                     org.lwjgl.opengl.GL30.glBeginTransformFeedback(org.lwjgl.opengl.GL11.GL_POINTS);
                     feedbackBegun = true;
@@ -212,9 +183,7 @@ import java.nio.FloatBuffer;
                     feedbackBegun = false;
                 }
                 source.displaced = true;
-                displacedCopies += source.used;
             }
-            passes++;
             if (!loggedFirstPass) {
                 loggedFirstPass = true;
                 StaticMesh.LOGGER.info("Soundstage: driver suspension displaced by transform feedback under a shader "
@@ -233,7 +202,6 @@ import java.nio.FloatBuffer;
             org.lwjgl.opengl.GL30.glBindVertexArray(vertexArray0);
             org.lwjgl.opengl.GL15.glBindBuffer(org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER, arrayBuffer0);
             org.lwjgl.opengl.GL20.glUseProgram(program0);
-            passNanos += System.nanoTime() - startedAt;
         }
     }
 
@@ -246,7 +214,8 @@ import java.nio.FloatBuffer;
         for (int attribute = 0; attribute < program.wordAttributes; attribute++) {
             int size = Math.min(4, program.words - attribute * 4);
             org.lwjgl.opengl.GL20.glEnableVertexAttribArray(attribute);
-            org.lwjgl.opengl.GL30.glVertexAttribIPointer(attribute, size, org.lwjgl.opengl.GL11.GL_UNSIGNED_INT, groupBytes,
+            org.lwjgl.opengl.GL30.glVertexAttribIPointer(attribute, size,
+                    org.lwjgl.opengl.GL11.GL_UNSIGNED_INT, groupBytes,
                     attribute * 16L);
         }
         int weight = program.wordAttributes;
@@ -285,7 +254,8 @@ import java.nio.FloatBuffer;
             shader = org.lwjgl.opengl.GL20.glCreateShader(org.lwjgl.opengl.GL20.GL_VERTEX_SHADER);
             org.lwjgl.opengl.GL20.glShaderSource(shader, source);
             org.lwjgl.opengl.GL20.glCompileShader(shader);
-            if (org.lwjgl.opengl.GL20.glGetShaderi(shader, org.lwjgl.opengl.GL20.GL_COMPILE_STATUS) == org.lwjgl.opengl.GL11.GL_FALSE) {
+            if (org.lwjgl.opengl.GL20.glGetShaderi(shader, org.lwjgl.opengl.GL20.GL_COMPILE_STATUS)
+                    == org.lwjgl.opengl.GL11.GL_FALSE) {
                 StaticMesh.LOGGER.warn("Soundstage: the displacement pass failed to compile: {}",
                         org.lwjgl.opengl.GL20.glGetShaderInfoLog(shader));
                 return null;
@@ -298,9 +268,11 @@ import java.nio.FloatBuffer;
             org.lwjgl.opengl.GL20.glBindAttribLocation(id, wordAttributes, "aWeight");
             CharSequence[] varyings = new CharSequence[wordAttributes];
             for (int attribute = 0; attribute < wordAttributes; attribute++) varyings[attribute] = "oWords" + attribute;
-            org.lwjgl.opengl.GL30.glTransformFeedbackVaryings(id, varyings, org.lwjgl.opengl.GL30.GL_INTERLEAVED_ATTRIBS);
+            org.lwjgl.opengl.GL30.glTransformFeedbackVaryings(id, varyings,
+                    org.lwjgl.opengl.GL30.GL_INTERLEAVED_ATTRIBS);
             org.lwjgl.opengl.GL20.glLinkProgram(id);
-            if (org.lwjgl.opengl.GL20.glGetProgrami(id, org.lwjgl.opengl.GL20.GL_LINK_STATUS) == org.lwjgl.opengl.GL11.GL_FALSE) {
+            if (org.lwjgl.opengl.GL20.glGetProgrami(id, org.lwjgl.opengl.GL20.GL_LINK_STATUS)
+                    == org.lwjgl.opengl.GL11.GL_FALSE) {
                 StaticMesh.LOGGER.warn("Soundstage: the displacement pass failed to link: {}",
                         org.lwjgl.opengl.GL20.glGetProgramInfoLog(id));
                 org.lwjgl.opengl.GL20.glDeleteProgram(id);
@@ -322,16 +294,19 @@ import java.nio.FloatBuffer;
     private static String source(int group, int stride, int positionOffset, int words, int wordAttributes) {
         StringBuilder glsl = new StringBuilder("#version 330 core\n\n");
         for (int attribute = 0; attribute < wordAttributes; attribute++) {
-            glsl.append("in ").append(uintType(Math.min(4, words - attribute * 4))).append(" aWords").append(attribute).append(";\n");
+            glsl.append("in ").append(uintType(Math.min(4, words - attribute * 4))).append(" aWords").append(attribute)
+                    .append(";\n");
         }
         glsl.append("in ").append(group == 1 ? "float" : "vec" + group).append(" aWeight;\n");
         glsl.append("uniform float Travel[").append(TRAVELS_PER_DRAW).append("];\n");
         for (int attribute = 0; attribute < wordAttributes; attribute++) {
-            glsl.append("flat out ").append(uintType(Math.min(4, words - attribute * 4))).append(" oWords").append(attribute).append(";\n");
+            glsl.append("flat out ").append(uintType(Math.min(4, words - attribute * 4))).append(" oWords")
+                    .append(attribute).append(";\n");
         }
         glsl.append("\nvoid main() {\n    uint w[").append(words).append("];\n");
         for (int word = 0; word < words; word++) {
-            glsl.append("    w[").append(word).append("] = aWords").append(word / 4).append(component(words, word)).append(";\n");
+            glsl.append("    w[").append(word).append("] = aWords").append(word / 4).append(component(words, word))
+                    .append(";\n");
         }
         glsl.append("    float travel = Travel[gl_InstanceID];\n");
         for (int vertex = 0; vertex < group; vertex++) {
@@ -341,7 +316,8 @@ import java.nio.FloatBuffer;
             String weight = group == 1 ? "aWeight" : "aWeight." + "xyzw".charAt(vertex);
             glsl.append("    {\n        float d = ").append(weight).append(" * travel;\n");
             if (shift == 0) {
-                glsl.append("        w[").append(word).append("] = floatBitsToUint(uintBitsToFloat(w[").append(word).append("]) + d);\n");
+                glsl.append("        w[").append(word).append("] = floatBitsToUint(uintBitsToFloat(w[").append(word)
+                        .append("]) + d);\n");
             } else {
                 String low = "((1u << " + shift + "u) - 1u)";
                 glsl.append("        uint bits = (w[").append(word).append("] >> ").append(shift).append("u) | (w[")
@@ -349,7 +325,8 @@ import java.nio.FloatBuffer;
                 glsl.append("        uint moved = floatBitsToUint(uintBitsToFloat(bits) + d);\n");
                 glsl.append("        w[").append(word).append("] = (w[").append(word).append("] & ").append(low)
                         .append(") | (moved << ").append(shift).append("u);\n");
-                glsl.append("        w[").append(word + 1).append("] = (w[").append(word + 1).append("] & ~").append(low)
+                glsl.append("        w[").append(word + 1).append("] = (w[").append(word + 1)
+                        .append("] & ~").append(low)
                         .append(") | (moved >> ").append(32 - shift).append("u);\n");
             }
             glsl.append("    }\n");
@@ -376,39 +353,6 @@ import java.nio.FloatBuffer;
         int size = Math.min(4, words - attribute * 4);
         return size == 1 ? "" : "." + "xyzw".charAt(word % 4);
     }
-
-    record Probe(float requested, float applied, boolean displaced, int vertices) {}
-
-    static Probe probe(Source source, int slot, float requested) {
-        int restName = source.rest.glVertexBuffer();
-        boolean displaced = source.displaced && source.copies != null;
-        int drawnName = displaced ? source.copies.glVertexBuffer() : restName;
-        long drawnOffset = displaced ? (long) slot * source.vertexCount * source.stride : 0L;
-        int bytes = source.vertexCount * source.stride;
-        java.nio.ByteBuffer rest = org.lwjgl.system.MemoryUtil.memAlloc(bytes);
-        java.nio.ByteBuffer drawn = org.lwjgl.system.MemoryUtil.memAlloc(bytes);
-        int copyRead0 = org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL31.GL_COPY_READ_BUFFER);
-        try {
-            org.lwjgl.opengl.GL15.glBindBuffer(org.lwjgl.opengl.GL31.GL_COPY_READ_BUFFER, restName);
-            org.lwjgl.opengl.GL15.glGetBufferSubData(org.lwjgl.opengl.GL31.GL_COPY_READ_BUFFER, 0L, rest);
-            org.lwjgl.opengl.GL15.glBindBuffer(org.lwjgl.opengl.GL31.GL_COPY_READ_BUFFER, drawnName);
-            org.lwjgl.opengl.GL15.glGetBufferSubData(org.lwjgl.opengl.GL31.GL_COPY_READ_BUFFER, drawnOffset, drawn);
-            float[] moved = new float[source.vertexCount];
-            int n = 0;
-            for (int vertex = 0; vertex < source.vertexCount; vertex++) {
-                float weight = source.weight(vertex);
-                if (weight < 0.5f) continue;
-                int at = vertex * source.stride + source.positionOffset + 8;
-                moved[n++] = (drawn.getFloat(at) - rest.getFloat(at)) / weight;
-            }
-            java.util.Arrays.sort(moved, 0, n);
-            return new Probe(requested, n == 0 ? 0f : moved[n / 2], displaced, n);
-        } finally {
-            org.lwjgl.opengl.GL15.glBindBuffer(org.lwjgl.opengl.GL31.GL_COPY_READ_BUFFER, copyRead0);
-            org.lwjgl.system.MemoryUtil.memFree(rest);
-            org.lwjgl.system.MemoryUtil.memFree(drawn);
-        }
-    }
 }
 *///?} else {
 final class DisplacementPass {
@@ -421,46 +365,14 @@ final class DisplacementPass {
 
     private static final java.util.Map<Integer, Program> PROGRAMS = new java.util.HashMap<>();
 
-    private static long passes;
-    private static long displacedCopies;
-    private static long passNanos;
     private static boolean loggedFirstPass;
 
     private DisplacementPass() {
     }
 
     static boolean isUsable() {
-        return usable && enabled && !NoFeedback.STAGED
+        return usable
                 && dev.armadeus.armalib.platform.client.render.RenderBackend.isOpenGl();
-    }
-
-    private static boolean enabled = true;
-
-    static void setEnabled(boolean on) {
-        enabled = on;
-    }
-
-    private static final class NoFeedback {
-        static final boolean STAGED = com.nachtraben.soundstage.RigStaging.sessionStages("soundstage:woofer-excursion", "no-feedback");
-
-        static {
-            if (STAGED) {
-                StaticMesh.LOGGER.warn("Soundstage: red control — the suspension is not displaced under a shader pack "
-                        + "(rig soundstage:woofer-excursion, no-feedback)");
-            }
-        }
-    }
-
-    static long passes() {
-        return passes;
-    }
-
-    static long displacedCopies() {
-        return displacedCopies;
-    }
-
-    static long passNanos() {
-        return passNanos;
     }
 
     static final class Source implements AutoCloseable {
@@ -648,7 +560,6 @@ final class DisplacementPass {
 
     static void displaceAll(java.util.List<Source> sources) {
         if (!isUsable()) return;
-        long startedAt = System.nanoTime();
         int program0 = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
         int vertexArray0 = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
         int arrayBuffer0 = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
@@ -682,9 +593,7 @@ final class DisplacementPass {
                     feedbackBegun = false;
                 }
                 source.displaced = true;
-                displacedCopies += source.used;
             }
-            passes++;
             if (!loggedFirstPass) {
                 loggedFirstPass = true;
                 StaticMesh.LOGGER.info("Soundstage: driver suspension displaced by transform feedback under a shader "
@@ -703,7 +612,6 @@ final class DisplacementPass {
             GL30.glBindVertexArray(vertexArray0);
             GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, arrayBuffer0);
             GL20.glUseProgram(program0);
-            passNanos += System.nanoTime() - startedAt;
         }
     }
 
@@ -771,16 +679,19 @@ final class DisplacementPass {
     private static String source(int group, int stride, int positionOffset, int words, int wordAttributes) {
         StringBuilder glsl = new StringBuilder("#version 330 core\n\n");
         for (int attribute = 0; attribute < wordAttributes; attribute++) {
-            glsl.append("in ").append(uintType(Math.min(4, words - attribute * 4))).append(" aWords").append(attribute).append(";\n");
+            glsl.append("in ").append(uintType(Math.min(4, words - attribute * 4))).append(" aWords").append(attribute)
+                    .append(";\n");
         }
         glsl.append("in ").append(group == 1 ? "float" : "vec" + group).append(" aWeight;\n");
         glsl.append("uniform float Travel[").append(TRAVELS_PER_DRAW).append("];\n");
         for (int attribute = 0; attribute < wordAttributes; attribute++) {
-            glsl.append("flat out ").append(uintType(Math.min(4, words - attribute * 4))).append(" oWords").append(attribute).append(";\n");
+            glsl.append("flat out ").append(uintType(Math.min(4, words - attribute * 4))).append(" oWords")
+                    .append(attribute).append(";\n");
         }
         glsl.append("\nvoid main() {\n    uint w[").append(words).append("];\n");
         for (int word = 0; word < words; word++) {
-            glsl.append("    w[").append(word).append("] = aWords").append(word / 4).append(component(words, word)).append(";\n");
+            glsl.append("    w[").append(word).append("] = aWords").append(word / 4).append(component(words, word))
+                    .append(";\n");
         }
         glsl.append("    float travel = Travel[gl_InstanceID];\n");
         for (int vertex = 0; vertex < group; vertex++) {
@@ -790,7 +701,8 @@ final class DisplacementPass {
             String weight = group == 1 ? "aWeight" : "aWeight." + "xyzw".charAt(vertex);
             glsl.append("    {\n        float d = ").append(weight).append(" * travel;\n");
             if (shift == 0) {
-                glsl.append("        w[").append(word).append("] = floatBitsToUint(uintBitsToFloat(w[").append(word).append("]) + d);\n");
+                glsl.append("        w[").append(word).append("] = floatBitsToUint(uintBitsToFloat(w[").append(word)
+                        .append("]) + d);\n");
             } else {
                 String low = "((1u << " + shift + "u) - 1u)";
                 glsl.append("        uint bits = (w[").append(word).append("] >> ").append(shift).append("u) | (w[")
@@ -798,7 +710,8 @@ final class DisplacementPass {
                 glsl.append("        uint moved = floatBitsToUint(uintBitsToFloat(bits) + d);\n");
                 glsl.append("        w[").append(word).append("] = (w[").append(word).append("] & ").append(low)
                         .append(") | (moved << ").append(shift).append("u);\n");
-                glsl.append("        w[").append(word + 1).append("] = (w[").append(word + 1).append("] & ~").append(low)
+                glsl.append("        w[").append(word + 1).append("] = (w[").append(word + 1)
+                        .append("] & ~").append(low)
                         .append(") | (moved >> ").append(32 - shift).append("u);\n");
             }
             glsl.append("    }\n");
@@ -875,36 +788,6 @@ final class DisplacementPass {
         GL30.glBindVertexArray(0);
         com.mojang.blaze3d.vertex.BufferUploader.invalidate();
         RenderSystem.assertOnRenderThread();
-    }
-
-    static float[] probe(Source source, int slot, float requested) {
-        boolean displaced = source.displaced && source.copiesVbo != 0;
-        int drawnVbo = displaced ? source.copiesVbo : source.restVbo;
-        long drawnOffset = displaced ? (long) slot * source.vertexCount * source.stride : 0L;
-        int bytes = source.vertexCount * source.stride;
-        ByteBuffer rest = org.lwjgl.system.MemoryUtil.memAlloc(bytes);
-        ByteBuffer drawn = org.lwjgl.system.MemoryUtil.memAlloc(bytes);
-        int bound = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
-        try {
-            GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, source.restVbo);
-            GL15.glGetBufferSubData(GL15.GL_ARRAY_BUFFER, 0L, rest);
-            GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, drawnVbo);
-            GL15.glGetBufferSubData(GL15.GL_ARRAY_BUFFER, drawnOffset, drawn);
-            float[] moved = new float[source.vertexCount];
-            int n = 0;
-            for (int vertex = 0; vertex < source.vertexCount; vertex++) {
-                float weight = source.weight(vertex);
-                if (weight < 0.5f) continue;
-                int at = vertex * source.stride + source.positionOffset + 8;
-                moved[n++] = (drawn.getFloat(at) - rest.getFloat(at)) / weight;
-            }
-            java.util.Arrays.sort(moved, 0, n);
-            return new float[]{requested, n == 0 ? 0f : moved[n / 2], displaced ? 1f : 0f, n};
-        } finally {
-            GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, bound);
-            org.lwjgl.system.MemoryUtil.memFree(rest);
-            org.lwjgl.system.MemoryUtil.memFree(drawn);
-        }
     }
 }
 //?}

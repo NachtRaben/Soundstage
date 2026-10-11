@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -14,6 +15,10 @@ import java.util.regex.Pattern;
 public final class FfmpegCommand {
 
     static final double MAX_FRAME_RATE = 30.5;
+
+    static final String KEYFRAMES_BY_TIME = "expr:isnan(prev_forced_t)+gte(t-prev_forced_t,1.9)";
+
+    static final String LIVE_ANALYZE_MICROS = "1000000";
 
     static final String URL_PROTOCOLS = "https,tls,tcp";
 
@@ -25,6 +30,16 @@ public final class FfmpegCommand {
             "(?i).*certificate.*(verif|not trusted|untrusted|does not match|self.signed|unknown ca|expired).*");
 
     static final String AT_MOST_30_FPS = "select='isnan(prev_selected_t)+gte(t-prev_selected_t,0.03)'";
+
+    static final String SILENCE = "anullsrc=r=48000:cl=stereo";
+
+    static final String SILENCE_LABEL = "[silence]";
+
+    static final String STILL_COLOUR = ":out_color_matrix=bt709:out_range=tv";
+
+    static final String STILL_LOOP = "format=yuv420p,loop=loop=-1:size=1:start=0,setpts=N/TB";
+
+    static final String STILL_QUALITY = "20";
 
     static final String TONE_MAP = "t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,"
             + "tonemap=tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p";
@@ -73,19 +88,20 @@ public final class FfmpegCommand {
         return List.copyOf(candidates);
     }
 
-    public static List<String> transcode(String ffmpeg, String input, long startMillis, int maxHeight,
+    public static List<String> transcode(String ffmpeg, String input, long startMillis, PictureSize.Copy picture,
                                          MediaProbe probe) {
-        return transcode(ffmpeg, input, startMillis, maxHeight, probe, true);
+        return transcode(ffmpeg, input, startMillis, picture, probe, true);
     }
 
-    public static List<String> transcode(String ffmpeg, String input, long startMillis, int maxHeight,
+    public static List<String> transcode(String ffmpeg, String input, long startMillis, PictureSize.Copy picture,
                                          MediaProbe probe, boolean toneMap) {
-        return transcodeOf(ffmpeg, input, startMillis, maxHeight, probe, toneMap);
+        return transcodeOf(ffmpeg, input, startMillis, picture, probe, toneMap);
     }
 
-    private static List<String> transcodeOf(String ffmpeg, String input, long startMillis, int maxHeight,
+    private static List<String> transcodeOf(String ffmpeg, String input, long startMillis, PictureSize.Copy picture,
                                             MediaProbe probe, boolean toneMap) {
         Optional<MediaProbe.Sound> sidecar = probe.surround() ? probe.surroundSound() : Optional.empty();
+        boolean silent = !probe.hasAudio();
         List<String> args = new ArrayList<>();
         args.add(ffmpeg);
         Collections.addAll(args, "-hide_banner", "-loglevel", "error", "-nostdin",
@@ -93,14 +109,21 @@ public final class FfmpegCommand {
         if (probe.hasVideo()) {
             Collections.addAll(args, "-map", "0:v:0?");
         }
-        if (sidecar.isPresent()) {
+        if (silent) {
+            Collections.addAll(args, "-filter_complex", SILENCE + SILENCE_LABEL, "-map", SILENCE_LABEL);
+            if (probe.durationMillis() != MediaProbe.UNKNOWN_DURATION) {
+                Collections.addAll(args, "-t", seconds(probe.durationMillis() - startMillis));
+            }
+            if (probe.hasVideo()) args.add("-shortest");
+        } else if (sidecar.isPresent()) {
             String map = "0:" + sidecar.get().index();
             Collections.addAll(args, "-map", map, "-map", map);
         } else {
             Collections.addAll(args, "-map", probe.sound().map(sound -> "0:" + sound.index()).orElse("0:a:0?"));
         }
         if (probe.hasVideo()) {
-            String filter = scale(maxHeight);
+            Objects.requireNonNull(picture, "a copy with a picture needs its size");
+            String filter = scale(picture);
             if (probe.videoFrameRate() > MAX_FRAME_RATE) {
                 filter += ",fps=30";
             }
@@ -108,13 +131,44 @@ public final class FfmpegCommand {
                 filter += ",zscale=" + probe.colour().zscaleInput() + ":" + TONE_MAP;
             }
             Collections.addAll(args, "-vf", filter);
-            addPictureEncoding(args);
+            addPictureEncoding(args, picture);
         }
         if (sidecar.isPresent()) {
             addSurroundEncodingAndOutput(args);
         } else {
             addSoundEncodingAndOutput(args);
         }
+        return args;
+    }
+
+    public static List<String> silence(String ffmpeg, long startMillis, long durationMillis) {
+        List<String> args = new ArrayList<>();
+        args.add(ffmpeg);
+        Collections.addAll(args, "-hide_banner", "-loglevel", "error", "-nostdin",
+                "-filter_complex", SILENCE + SILENCE_LABEL, "-map", SILENCE_LABEL);
+        if (durationMillis != MediaProbe.UNKNOWN_DURATION) {
+            Collections.addAll(args, "-t", seconds(durationMillis - startMillis));
+        }
+        addSoundEncodingAndOutput(args);
+        return args;
+    }
+
+    public static List<String> still(String ffmpeg, String input, StillImage.Type type, PictureSize.Copy picture) {
+        Objects.requireNonNull(picture, "an image's copy needs its size");
+        List<String> args = new ArrayList<>();
+        args.add(ffmpeg);
+        Collections.addAll(args, "-hide_banner", "-loglevel", "error", "-nostdin",
+                "-max_pixels", Long.toString(StillImage.MAX_PIXELS),
+                "-protocol_whitelist", FILE_PROTOCOLS, "-f", type.demuxer, "-i", input,
+                "-filter_complex", "[0:v]" + scale(picture) + STILL_COLOUR + "," + STILL_LOOP + "[picture];"
+                        + SILENCE + SILENCE_LABEL,
+                "-map", "[picture]", "-map", SILENCE_LABEL, "-r", "1",
+                "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency",
+                "-profile:v", "main", "-pix_fmt", "yuv420p", "-g", "1", "-bf", "0",
+                "-colorspace", "bt709", "-color_range", "tv",
+                "-x264-params", X264_PARAMS,
+                "-crf", STILL_QUALITY, "-maxrate", picture.kbps() + "k", "-bufsize", picture.kbps() + "k");
+        addSoundEncodingAndOutput(args);
         return args;
     }
 
@@ -132,7 +186,7 @@ public final class FfmpegCommand {
     }
 
     public static List<String> transcodeUrls(String ffmpeg, YoutubeStreams.Streams streams, long startMillis,
-                                              int maxHeight) {
+                                              PictureSize.Copy picture) {
         List<String> args = new ArrayList<>();
         args.add(ffmpeg);
         Collections.addAll(args, "-hide_banner", "-loglevel", "error", "-nostdin");
@@ -141,9 +195,24 @@ public final class FfmpegCommand {
         Collections.addAll(args, "-map", "0:v:0", "-map", "1:a:0");
         if (streams.surround()) Collections.addAll(args, "-map", "1:a:0");
         Collections.addAll(args, "-shortest",
-                "-vf", AT_MOST_30_FPS + "," + scale(maxHeight));
-        addPictureEncoding(args);
+                "-vf", AT_MOST_30_FPS + "," + scale(picture));
+        addPictureEncoding(args, picture);
         if (streams.surround()) {
+            addSurroundEncodingAndOutput(args);
+        } else {
+            addSoundEncodingAndOutput(args);
+        }
+        return args;
+    }
+
+    public static List<String> transcodeSoundUrl(String ffmpeg, YoutubeStreams.Streams streams, long startMillis) {
+        List<String> args = new ArrayList<>();
+        args.add(ffmpeg);
+        Collections.addAll(args, "-hide_banner", "-loglevel", "error", "-nostdin");
+        addUrlInput(args, streams.audio(), streams.audioContainer(), startMillis);
+        Collections.addAll(args, "-map", "0:a:0");
+        if (streams.surround()) {
+            Collections.addAll(args, "-map", "0:a:0");
             addSurroundEncodingAndOutput(args);
         } else {
             addSoundEncodingAndOutput(args);
@@ -169,16 +238,44 @@ public final class FfmpegCommand {
                 "-f", container.demuxer(), "-ss", seconds(startMillis), "-i", url.toASCIIString());
     }
 
-    private static String scale(int maxHeight) {
-        return "scale=-2:'trunc(min(ih," + maxHeight + ")/2)*2'";
+    private static String scale(PictureSize.Copy picture) {
+        String fit = "min(1,min(" + picture.width() + "/iw," + picture.height() + "/ih))";
+        return "scale='" + side("iw", fit) + "':'" + side("ih", fit) + "'";
     }
 
-    private static void addPictureEncoding(List<String> args) {
+    private static String side(String size, String fit) {
+        String rounded = "2*round(" + size + "*" + fit + "/2)";
+        return "trunc(min(" + size + "," + rounded + ")/2)*2";
+    }
+
+    static final int SLICES = 4;
+    static final String X264_PARAMS = "repeat-headers=1:threads=" + SLICES + ":slices=" + SLICES;
+
+    private static void addPictureEncoding(List<String> args, PictureSize.Copy picture) {
+        int kbps = picture.kbps();
         Collections.addAll(args,
                 "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency",
                 "-profile:v", "main", "-pix_fmt", "yuv420p", "-g", "60", "-bf", "0",
-                "-x264-params", "repeat-headers=1",
-                "-b:v", "2M", "-maxrate", "2500k", "-bufsize", "4M");
+                "-force_key_frames", KEYFRAMES_BY_TIME,
+                "-x264-params", X264_PARAMS,
+                "-b:v", kbps + "k", "-maxrate", kbps * 5 / 4 + "k", "-bufsize", kbps * 2 + "k");
+    }
+
+    public static List<String> liveReencode(String ffmpeg, PictureSize.Copy picture) {
+        List<String> args = new ArrayList<>();
+        args.add(ffmpeg);
+        Collections.addAll(args, "-hide_banner", "-loglevel", "error", "-nostdin", "-copyts",
+                "-analyzeduration", LIVE_ANALYZE_MICROS, "-protocol_whitelist", "pipe", "-f", "mpegts", "-i", "pipe:0",
+                "-map", "0:v:0", "-vf", AT_MOST_30_FPS + "," + scale(picture));
+        addPictureEncoding(args, picture);
+        Collections.addAll(args, "-f", "mpegts", "-muxdelay", "0", "-muxpreload", "0", "pipe:1");
+        return args;
+    }
+
+    public static int pictureBitrateKbps(int height) {
+        if (height <= 480) return Math.max(400, height * 2000 / 480);
+        if (height <= 720) return 2000 + (height - 480) * 2000 / 240;
+        return Math.min(6000, 4000 + (height - 720) * 2000 / 360);
     }
 
     private static void addSurroundEncodingAndOutput(List<String> args) {

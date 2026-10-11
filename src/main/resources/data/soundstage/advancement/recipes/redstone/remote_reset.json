@@ -1,0 +1,32 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_remote": {
+      "conditions": {
+        "items": [
+          {
+            "items": "soundstage:remote"
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    },
+    "has_the_recipe": {
+      "conditions": {
+        "recipe": "soundstage:remote_reset"
+      },
+      "trigger": "minecraft:recipe_unlocked"
+    }
+  },
+  "requirements": [
+    [
+      "has_the_recipe",
+      "has_remote"
+    ]
+  ],
+  "rewards": {
+    "recipes": [
+      "soundstage:remote_reset"
+    ]
+  }
+}

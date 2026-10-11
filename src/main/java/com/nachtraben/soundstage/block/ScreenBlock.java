@@ -1,7 +1,10 @@
 package com.nachtraben.soundstage.block;
 
 import com.mojang.serialization.MapCodec;
+import com.nachtraben.soundstage.client.SoundstageClientInit;
+import com.nachtraben.soundstage.item.SpeakerLinkItem;
 import com.nachtraben.soundstage.registry.ModBlockEntities;
+import com.nachtraben.soundstage.util.WorldAccess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
@@ -28,9 +31,11 @@ import org.jetbrains.annotations.Nullable;
 
 public class ScreenBlock extends BaseEntityBlock {
     //? if >=1.21.11 {
-    /*public static final net.minecraft.world.level.block.state.properties.EnumProperty<net.minecraft.core.Direction> FACING = HorizontalDirectionalBlock.FACING;
+    /*public static final net.minecraft.world.level.block.state.properties.EnumProperty<net.minecraft.core.Direction>
+            FACING = HorizontalDirectionalBlock.FACING;
     *///?} else {
-    public static final net.minecraft.world.level.block.state.properties.DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
+    public static final net.minecraft.world.level.block.state.properties.DirectionProperty FACING =
+            HorizontalDirectionalBlock.FACING;
     //?}
 
     private static final VoxelShape NORTH_SHAPE = Block.box(0, 0, 14, 16, 16, 16);
@@ -92,15 +97,18 @@ public class ScreenBlock extends BaseEntityBlock {
 
     @Nullable
     @Override
-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state,
+                                                                  BlockEntityType<T> type) {
         if (level.isClientSide()) {
             return null;
         }
-        return createTickerHelper(type, ModBlockEntities.SCREEN_BLOCK_ENTITY.get(), (lvl, p, s, be) -> be.tick(lvl, p, s));
+        return createTickerHelper(type, ModBlockEntities.SCREEN_BLOCK_ENTITY.get(),
+                (lvl, p, s, be) -> be.tick(lvl, p, s));
     }
 
     @Override
-    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer,
+                            ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (level.isClientSide() || !(placer instanceof Player player)) {
             return;
@@ -110,14 +118,14 @@ public class ScreenBlock extends BaseEntityBlock {
         }
         Direction facing = state.getValue(FACING);
         for (BlockPos neighbourPos : ScreenBlockEntity.inPlaneNeighbours(pos, facing)) {
-            if (!(com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, neighbourPos)
+            if (!(WorldAccess.blockEntityIfLoaded(level, neighbourPos)
                     instanceof ScreenBlockEntity neighbour)
                     || neighbour.getBlockState().getValue(FACING) != facing
                     || neighbour.getReceiverPos() == null) {
                 continue;
             }
             BlockPos receiverPos = neighbour.getReceiverPos();
-            if (!(com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, receiverPos)
+            if (!(WorldAccess.blockEntityIfLoaded(level, receiverPos)
                     instanceof ReceiverBlockEntity receiver) || !receiver.mayControl(player)) {
                 continue;
             }
@@ -138,13 +146,14 @@ public class ScreenBlock extends BaseEntityBlock {
     //? if >=1.20.5 {
     @Override
     //?}
-    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
-        if (player.getMainHandItem().getItem() instanceof com.nachtraben.soundstage.item.SpeakerLinkItem
-                || player.getOffhandItem().getItem() instanceof com.nachtraben.soundstage.item.SpeakerLinkItem) {
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
+                                               BlockHitResult hitResult) {
+        if (player.getMainHandItem().getItem() instanceof SpeakerLinkItem
+                || player.getOffhandItem().getItem() instanceof SpeakerLinkItem) {
             return InteractionResult.PASS;
         }
         if (level.isClientSide() && level.getBlockEntity(pos) instanceof ScreenBlockEntity screen) {
-            com.nachtraben.soundstage.client.SoundstageClientInit.openDisplayScreen(screen);
+            SoundstageClientInit.openDisplayScreen(screen);
         }
         return InteractionResult.SUCCESS;
     }

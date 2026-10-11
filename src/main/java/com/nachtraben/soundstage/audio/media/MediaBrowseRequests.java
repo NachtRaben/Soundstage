@@ -16,7 +16,8 @@ public final class MediaBrowseRequests {
         MediaBrowseIo.execute(() -> {
             MediaListing.Result result = MediaFolder.listNames();
             level.getServer().execute(() ->
-                    Network.sendToPlayer(player, new MediaBrowseReplyS2CPacket(pos, result.names(), result.truncated())));
+                    Network.sendToPlayer(player,
+                            new MediaBrowseReplyS2CPacket(pos, result.names(), result.truncated())));
         });
     }
 }

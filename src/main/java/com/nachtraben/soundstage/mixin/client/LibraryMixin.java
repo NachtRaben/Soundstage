@@ -6,7 +6,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 //? if >=1.21 && <1.21.11 {
 import com.llamalad7.mixinextras.sugar.Local;
-import com.nachtraben.soundstage.RigStaging;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.openal.ALC10;
 import org.spongepowered.asm.mixin.Shadow;
@@ -21,7 +20,8 @@ public class LibraryMixin {
 
     private static final int MIN_STREAMING_CHANNELS = 32;
 
-    @ModifyExpressionValue(method = "init", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;clamp(III)I", ordinal = 0))
+    @ModifyExpressionValue(method = "init",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;clamp(III)I", ordinal = 0))
     private int soundstage$raiseStreamingPoolFloor(int original) {
         return Math.max(original, MIN_STREAMING_CHANNELS);
     }
@@ -38,7 +38,6 @@ public class LibraryMixin {
     @ModifyArg(method = "init", at = @At(value = "INVOKE",
             target = "Lorg/lwjgl/openal/ALC10;alcCreateContext(JLjava/nio/IntBuffer;)J"), index = 1)
     private IntBuffer soundstage$keepHrtfRequest(IntBuffer original, @Local(argsOnly = true) boolean enableHrtf) {
-        if (RigStaging.fault("hrtf-request-dropped")) return original;
         IntBuffer attributes = soundstage$contextAttributes.clear();
         if (ALC10.alcGetInteger(this.currentDevice, ALC_NUM_HRTF_SPECIFIERS_SOFT) > 0) {
             boolean hrtf = enableHrtf && ALC10.alcIsExtensionPresent(this.currentDevice, "ALC_SOFT_HRTF");

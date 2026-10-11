@@ -4,6 +4,8 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 final class TarReader {
 
@@ -209,8 +211,8 @@ final class TarReader {
         }
     }
 
-    private static java.util.List<String[]> paxRecords(String pax) throws IOException {
-        java.util.List<String[]> records = new java.util.ArrayList<>();
+    private static List<String[]> paxRecords(String pax) throws IOException {
+        List<String[]> records = new ArrayList<>();
         byte[] bytes = pax.getBytes(StandardCharsets.UTF_8);
         int at = 0;
         while (at < bytes.length) {

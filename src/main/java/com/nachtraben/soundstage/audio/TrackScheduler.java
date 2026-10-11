@@ -1,20 +1,49 @@
 package com.nachtraben.soundstage.audio;
 
+import com.nachtraben.soundstage.audio.video.SoundChoices;
+import com.nachtraben.soundstage.audio.video.VideoCapableTrack;
+import com.nachtraben.soundstage.audio.video.VideoRelay;
+import com.nachtraben.soundstage.block.IAudioReceiver;
+import com.nachtraben.soundstage.config.SoundstageConfig;
+import com.nachtraben.soundstage.core.FailureBreaker;
+import com.nachtraben.soundstage.core.FailureBreakers;
+import com.nachtraben.soundstage.core.LoadFailureMessage;
+import com.nachtraben.soundstage.core.QueueLoopPolicy;
+import com.nachtraben.soundstage.core.SeekTracker;
+import com.nachtraben.soundstage.core.SourceKey;
+import com.nachtraben.soundstage.core.StreamRedial;
+import com.nachtraben.soundstage.core.TrackDuration;
+import com.nachtraben.soundstage.core.TrackQueue;
+import com.nachtraben.soundstage.core.YoutubeThumbnail;
+import com.nachtraben.soundstage.core.video.AudioChoice;
+import com.nachtraben.soundstage.core.video.SubtitleChoice;
 import com.nachtraben.soundstage.network.NetworkHandler;
+import com.nachtraben.soundstage.network.NowPlayingS2CPacket;
 import com.nachtraben.soundstage.network.SpeakerMetadataS2CPacket;
+import com.nachtraben.soundstage.util.WorldAccess;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.event.AudioEventAdapter;
+import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason;
+import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
+import com.sedmelluq.discord.lavaplayer.track.TrackMarker;
+import com.sedmelluq.discord.lavaplayer.track.TrackMarkerHandler;
+import dev.armadeus.armalib.platform.network.Network;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import com.nachtraben.soundstage.core.TrackQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TrackScheduler extends AudioEventAdapter {
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     public static final class QueueEntry {
         private final TrackQueue.Entry delegate;
@@ -31,14 +60,48 @@ public class TrackScheduler extends AudioEventAdapter {
 
     private final BlockPos pos;
     private final ServerLevel level;
-    private final com.nachtraben.soundstage.block.IAudioReceiver receiver;
+    private final IAudioReceiver receiver;
 
-    @org.jetbrains.annotations.Nullable
-    private final com.nachtraben.soundstage.audio.video.VideoRelay videoRelay;
+    @Nullable
+    private final VideoRelay videoRelay;
+
+    private final SoundChoices soundChoices =
+            new SoundChoices() {
+                @Override
+                public String language() {
+                    return receiver == null ? null : receiver.audioLanguage();
+                }
+
+                @Override
+                public String trackChoice(String identifier) {
+                    return TrackScheduler.this.trackChoice(identifier);
+                }
+
+                @Override
+                public void offered() {
+                    syncMetadata();
+                }
+            };
+
+    private String trackChoice(String identifier) {
+        if (receiver == null || identifier == null) return null;
+        String choice = receiver.audioChoices().get(identifier);
+        return SubtitleChoice.AUTO.equals(choice) ? null : choice;
+    }
+
+    private AudioChoice.Offer audioOffer(AudioTrack track) {
+        if (receiver == null || track == null) return null;
+        List<AudioChoice.Entry> entries =
+                track instanceof VideoCapableTrack video ? video.audioEntries() : null;
+        String language = receiver.audioLanguage();
+        if ((entries == null || entries.isEmpty()) && language == null) return null;
+        return AudioChoice.offer(entries, language,
+                trackChoice(track.getIdentifier()));
+    }
 
     public TrackScheduler(AudioPlayer player, BlockPos pos, ServerLevel level,
-                          com.nachtraben.soundstage.block.IAudioReceiver receiver,
-                          @org.jetbrains.annotations.Nullable com.nachtraben.soundstage.audio.video.VideoRelay videoRelay) {
+                          IAudioReceiver receiver,
+                          @Nullable VideoRelay videoRelay) {
         this.player = player;
         this.pos = pos;
         this.level = level;
@@ -46,12 +109,12 @@ public class TrackScheduler extends AudioEventAdapter {
         this.videoRelay = videoRelay;
     }
 
-    @org.jetbrains.annotations.Nullable
-    public com.nachtraben.soundstage.audio.video.VideoRelay videoRelay() {
+    @Nullable
+    public VideoRelay videoRelay() {
         return videoRelay;
     }
 
-    boolean ownsReceiver(com.nachtraben.soundstage.block.IAudioReceiver candidate) {
+    boolean ownsReceiver(IAudioReceiver candidate) {
         return receiver != null && receiver == candidate;
     }
 
@@ -62,20 +125,21 @@ public class TrackScheduler extends AudioEventAdapter {
     private long pendingSeek = -1;
 
     private volatile String lastAnnouncedIdentifier;
+    private volatile boolean lastAnnouncedStill;
 
-    private final com.nachtraben.soundstage.core.FailureBreakers breakers =
-            new com.nachtraben.soundstage.core.FailureBreakers();
+    private final FailureBreakers breakers =
+            new FailureBreakers();
 
-    private final java.util.concurrent.atomic.AtomicInteger failedInARow =
-            new java.util.concurrent.atomic.AtomicInteger();
+    private final AtomicInteger failedInARow =
+            new AtomicInteger();
 
     private volatile String lastFailureDetail = "";
-    private volatile String lastFailureSource = com.nachtraben.soundstage.core.SourceKey.UNKNOWN;
+    private volatile String lastFailureSource = SourceKey.UNKNOWN;
 
     private static String sourceOf(AudioTrack track) {
         return track == null
-                ? com.nachtraben.soundstage.core.SourceKey.UNKNOWN
-                : com.nachtraben.soundstage.core.SourceKey.forUrl(track.getInfo().uri);
+                ? SourceKey.UNKNOWN
+                : SourceKey.forUrl(track.getInfo().uri);
     }
 
     private static final long SILENT_FAILURE_MILLIS = 3000;
@@ -128,24 +192,21 @@ public class TrackScheduler extends AudioEventAdapter {
         AudioTrack current = player.getPlayingTrack();
         AudioTrack held = takeHeldStream();
         if (current == null) current = held;
-        if (loopMode == 1 && current != null && queue.isEmpty() && !(current instanceof LiveInputTrack)
-                && !com.nachtraben.soundstage.RigStaging.fault("skip-no-redial")) {
+        if (loopMode == 1 && current != null && queue.isEmpty() && !(current instanceof LiveInputTrack)) {
             player.startTrack(current.makeClone(), false);
             player.setPaused(false);
             syncMetadata();
             return;
         }
-        if (!com.nachtraben.soundstage.RigStaging.fault("skip-not-requeued")) {
-            requeueCurrent(current,
-                    com.nachtraben.soundstage.core.QueueLoopPolicy.Transition.SKIPPED);
-        }
+        requeueCurrent(current,
+                QueueLoopPolicy.Transition.SKIPPED);
         nextTrack();
     }
 
     private void requeueCurrent(AudioTrack track,
-                                com.nachtraben.soundstage.core.QueueLoopPolicy.Transition transition) {
-        if (track != null && (!(track instanceof LiveInputTrack) || com.nachtraben.soundstage.RigStaging.fault("share-requeued"))
-                && com.nachtraben.soundstage.core.QueueLoopPolicy.shouldRequeue(loopMode == 2, transition)) {
+                                QueueLoopPolicy.Transition transition) {
+        if (track != null && !(track instanceof LiveInputTrack)
+                && QueueLoopPolicy.shouldRequeue(loopMode == 2, transition)) {
             queue.add(track.makeClone());
         }
     }
@@ -154,7 +215,7 @@ public class TrackScheduler extends AudioEventAdapter {
         AudioTrack current = player.getPlayingTrack();
         AudioTrack held = takeHeldStream();
         if (current == null) current = held;
-        if (current != null && !(current instanceof LiveInputTrack) && !com.nachtraben.soundstage.RigStaging.fault("interrupted-dropped")) {
+        if (current != null && !(current instanceof LiveInputTrack)) {
             AudioTrack resume = current.makeClone();
             if (current.isSeekable()) resume.setPosition(current.getPosition());
             queue.move(queue.add(resume).id(), 0);
@@ -176,6 +237,15 @@ public class TrackScheduler extends AudioEventAdapter {
         if (current.isSeekable()) again.setPosition(current.getPosition());
         player.startTrack(again, false);
         syncMetadata();
+    }
+
+    private void replayKeepingPicturePlace() {
+        if (videoRelay != null) videoRelay.carryPlace(player.getPlayingTrack());
+        try {
+            replayCurrent();
+        } finally {
+            if (videoRelay != null) videoRelay.carryPlace(null);
+        }
     }
 
     public void clearQueue() {
@@ -202,7 +272,7 @@ public class TrackScheduler extends AudioEventAdapter {
         TrackQueue.Entry target = queue.take(entryId);
         if (target == null) return false;
         requeueCurrent(player.getPlayingTrack(),
-                com.nachtraben.soundstage.core.QueueLoopPolicy.Transition.PLAY_NOW);
+                QueueLoopPolicy.Transition.PLAY_NOW);
         clearSuspension();
         player.setPaused(false);
         player.startTrack(target.track(), false);
@@ -211,8 +281,8 @@ public class TrackScheduler extends AudioEventAdapter {
         return true;
     }
 
-    private final com.nachtraben.soundstage.core.SeekTracker seekTracker =
-            new com.nachtraben.soundstage.core.SeekTracker();
+    private final SeekTracker seekTracker =
+            new SeekTracker();
 
     public void seek(long position) {
         AudioTrack track = player.getPlayingTrack();
@@ -224,11 +294,75 @@ public class TrackScheduler extends AudioEventAdapter {
         }
     }
 
-    public void retakeForSurround() {
+    public void advanceStill(AudioTrack track) {
+        if (player.getPlayingTrack() != track || track == null || queue.isEmpty() || loopMode == 1
+                || player.isPaused()) {
+            return;
+        }
+        LOGGER.debug("Soundstage: receiver {} moves on from an image after {} s, to the next in its queue",
+                pos.toShortString(), SoundstageConfig.imageDisplaySeconds());
+        requeueCurrent(track, QueueLoopPolicy.Transition.FINISHED);
+        movingOnFromImage = true;
+        try {
+            nextTrack();
+        } finally {
+            movingOnFromImage = false;
+        }
+        persistToReceiver();
+    }
+
+    private boolean movingOnFromImage;
+
+    private boolean imageChange(AudioTrack track) {
+        return movingOnFromImage && track instanceof VideoCapableTrack video && video.isStill();
+    }
+
+    public boolean chooseAudio(String choice) {
         AudioTrack track = player.getPlayingTrack();
-        if (track == null || !track.isSeekable()) return;
-        LOGGER.info("Soundstage: receiver {} takes up its film's surround track for speakers linked part-way",
-                pos.toShortString());
+        AudioChoice.Offer offer = audioOffer(track);
+        if (!AudioChoice.accepts(offer, choice)) return false;
+        String memoryKey = track.getIdentifier();
+        if (choice.equals(AudioChoice.DEFAULT)) {
+            receiver.setAudioLanguage(null);
+            receiver.audioChoices().put(memoryKey, SubtitleChoice.AUTO);
+        } else if (choice.startsWith(AudioChoice.LANGUAGE)) {
+            receiver.setAudioLanguage(choice.substring(AudioChoice.LANGUAGE.length()));
+            receiver.audioChoices().put(memoryKey, SubtitleChoice.AUTO);
+        } else {
+            receiver.audioChoices().put(memoryKey, choice);
+        }
+        VideoCapableTrack.PictureRetake retake =
+                track instanceof VideoCapableTrack video
+                        ? video.applyAudio() : VideoCapableTrack.PictureRetake.NONE;
+        if (retake == VideoCapableTrack.PictureRetake.REPLAY) {
+            LOGGER.info("Soundstage: receiver {} plays its track again from where it is, in the audio chosen",
+                    pos.toShortString());
+            replayKeepingPicturePlace();
+            return true;
+        }
+        if (retake == VideoCapableTrack.PictureRetake.SEEK && track.isSeekable()) {
+            LOGGER.info("Soundstage: receiver {} starts its copy again in the audio chosen", pos.toShortString());
+            seek(track.getPosition());
+            return true;
+        }
+        syncMetadata();
+        return true;
+    }
+
+    public void retake(boolean surround, VideoCapableTrack.PictureRetake picture) {
+        AudioTrack track = player.getPlayingTrack();
+        if (track == null) return;
+        if (picture == VideoCapableTrack.PictureRetake.REPLAY) {
+            LOGGER.info("Soundstage: receiver {} plays its track again from where it is, for its picture",
+                    pos.toShortString());
+            replayKeepingPicturePlace();
+            return;
+        }
+        if (!track.isSeekable()) return;
+        boolean display = picture == VideoCapableTrack.PictureRetake.SEEK;
+        LOGGER.info("Soundstage: receiver {} starts its copy again for {}", pos.toShortString(),
+                display && surround ? "its picture and speakers linked part-way" : display ? "its picture"
+                        : "speakers linked part-way");
         seek(track.getPosition());
     }
 
@@ -255,14 +389,11 @@ public class TrackScheduler extends AudioEventAdapter {
     }
 
     public void resume(boolean mayStartQueue) {
-        if (com.nachtraben.soundstage.RigStaging.fault("never-resumed")) return;
         AudioTrack held = takeHeldStream();
         AudioTrack current = player.getPlayingTrack();
         player.setPaused(false);
-        if (held != null && !com.nachtraben.soundstage.RigStaging.fault("resume-drops-held-stream")) {
-            heldStreamsDialled.incrementAndGet();
+        if (held != null) {
             player.startTrack(held, false);
-        } else if (held != null) {
         } else if (current != null && isLive(current)) {
             player.startTrack(current.makeClone(), false);
         } else if (current == null && mayStartQueue && !queue.isEmpty()) {
@@ -272,7 +403,7 @@ public class TrackScheduler extends AudioEventAdapter {
     }
 
     private static boolean isLive(AudioTrack track) {
-        return !com.nachtraben.soundstage.core.TrackDuration.isKnown(track.getDuration()) || !track.isSeekable();
+        return !TrackDuration.isKnown(track.getDuration()) || !track.isSeekable();
     }
 
     public List<QueueEntry> getQueue() {
@@ -286,13 +417,17 @@ public class TrackScheduler extends AudioEventAdapter {
         if (!isActiveSession()) {
             return;
         }
-        LOGGER.info("Receiver at {} track ended: reason={} mayStartNext={} loop={} failed={} queue={} position={} paused={}",
-                pos, endReason, endReason.mayStartNext, loopMode, currentTrackFailed, queue.size(),
-                track == null ? -1 : track.getPosition(), player.isPaused());
+        if (imageChange(track)) {
+            LOGGER.debug("Receiver at {} moved on from an image: reason={} queue={}", pos, endReason, queue.size());
+        } else {
+            LOGGER.info("Receiver at {} track ended: reason={} mayStartNext={} loop={} failed={} queue={} position={} "
+                            + "paused={}", pos, endReason, endReason.mayStartNext, loopMode, currentTrackFailed,
+                    queue.size(), track == null ? -1 : track.getPosition(), player.isPaused());
+        }
 
         if (videoRelay != null) videoRelay.detach(track, endReason == AudioTrackEndReason.CLEANUP);
 
-        if (track instanceof LiveInputTrack share && !com.nachtraben.soundstage.RigStaging.fault("share-judged-as-track")) {
+        if (track instanceof LiveInputTrack share) {
             onShareEnded(share, endReason);
             return;
         }
@@ -307,7 +442,7 @@ public class TrackScheduler extends AudioEventAdapter {
             long playedTime = track == null ? 0 : Math.max(0, track.getPosition());
             if (track != null && track == windowReachedBy) playedTime = Math.max(playedTime, SILENT_FAILURE_MILLIS);
             boolean live = track != null
-                    && !com.nachtraben.soundstage.core.TrackDuration.isKnown(track.getDuration());
+                    && !TrackDuration.isKnown(track.getDuration());
             boolean endedEarly = endReason == AudioTrackEndReason.FINISHED
                     && track != null
                     && playedTime < SILENT_FAILURE_MILLIS
@@ -326,15 +461,14 @@ public class TrackScheduler extends AudioEventAdapter {
             if (playedTime >= SILENT_FAILURE_MILLIS) {
                 failedInARow.set(0);
             } else if (failed && failedInARow.incrementAndGet()
-                    >= com.nachtraben.soundstage.core.FailureBreaker.TRIP_THRESHOLD
-                    && !com.nachtraben.soundstage.RigStaging.fault("no-stop")) {
+                    >= FailureBreaker.TRIP_THRESHOLD) {
                 currentTrackFailed = false;
                 stopAfterFailedRun();
                 persistToReceiver();
                 return;
             }
 
-            if (track != null && com.nachtraben.soundstage.core.StreamRedial.shouldRedial(
+            if (track != null && StreamRedial.shouldRedial(
                     live, playedTime, SILENT_FAILURE_MILLIS)) {
                 currentTrackFailed = false;
                 if (player.isPaused()) {
@@ -359,27 +493,21 @@ public class TrackScheduler extends AudioEventAdapter {
                 player.startTrack(track.makeClone(), false);
             } else if (loopMode == 1) {
                 if (level != null) {
-                    AudioManager.get().broadcastMessage(pos, level, this, net.minecraft.network.chat.Component
+                    AudioManager.get().broadcastMessage(pos, level, this, Component
                             .literal("Skipping a track that will not play; repeat is still on.")
-                            .withStyle(net.minecraft.ChatFormatting.YELLOW));
+                            .withStyle(ChatFormatting.YELLOW));
                 }
                 nextTrack();
             } else {
                 if (failed && level != null) {
-                    AudioManager.get().broadcastMessage(pos, level, this, net.minecraft.network.chat.Component
+                    AudioManager.get().broadcastMessage(pos, level, this, Component
                             .literal("Skipped a track that failed to play.")
-                            .withStyle(net.minecraft.ChatFormatting.YELLOW));
-                }
-                if (failed && com.nachtraben.soundstage.RigStaging.fault("restore-skip-blocked")) {
-                    persistToReceiver();
-                    return;
+                            .withStyle(ChatFormatting.YELLOW));
                 }
                 requeueCurrent(track, failed
-                        ? com.nachtraben.soundstage.core.QueueLoopPolicy.Transition.FAILED
-                        : com.nachtraben.soundstage.core.QueueLoopPolicy.Transition.FINISHED);
-                if (!(failed && com.nachtraben.soundstage.RigStaging.fault("no-skip"))) {
-                    nextTrack();
-                }
+                        ? QueueLoopPolicy.Transition.FAILED
+                        : QueueLoopPolicy.Transition.FINISHED);
+                nextTrack();
             }
         } else {
             syncMetadata();
@@ -391,7 +519,7 @@ public class TrackScheduler extends AudioEventAdapter {
         currentTrackFailed = false;
         if (endReason == AudioTrackEndReason.CLEANUP) {
             share.session().end(LiveInputSession.End.PAUSED);
-        } else if (com.nachtraben.soundstage.RigStaging.fault("share-clone-ends") || !(player.getPlayingTrack() instanceof LiveInputTrack now
+        } else if (!(player.getPlayingTrack() instanceof LiveInputTrack now
                 && now.session() == share.session())) {
             share.session().end(LiveInputSession.End.RECEIVER_MOVED_ON);
         }
@@ -405,7 +533,7 @@ public class TrackScheduler extends AudioEventAdapter {
 
     @Override
     public void onTrackException(AudioPlayer player, AudioTrack track,
-                                 com.sedmelluq.discord.lavaplayer.tools.FriendlyException exception) {
+                                 FriendlyException exception) {
         if (!isActiveSession()) {
             return;
         }
@@ -431,13 +559,10 @@ public class TrackScheduler extends AudioEventAdapter {
         syncMetadata();
     }
 
-    public void onLoadFailed(String url, com.sedmelluq.discord.lavaplayer.tools.FriendlyException exception) {
-        if (com.nachtraben.soundstage.RigStaging.fault("breaker-never-trips")) {
-            return;
-        }
+    public void onLoadFailed(String url, FriendlyException exception) {
         String detail = exception.getMessage() == null ? "unknown error" : exception.getMessage();
         String source = sourceKeyFor(url);
-        if (exception.severity == com.sedmelluq.discord.lavaplayer.tools.FriendlyException.Severity.FAULT) {
+        if (exception.severity == FriendlyException.Severity.FAULT) {
             trip(source, "Loading failed: " + detail);
         } else {
             recordFailure(source, "Loading failed: " + detail);
@@ -445,14 +570,11 @@ public class TrackScheduler extends AudioEventAdapter {
     }
 
     private static String sourceKeyFor(String url) {
-        if (com.nachtraben.soundstage.RigStaging.fault("breaker-not-scoped")) {
-            return "rig-shared-service";
-        }
-        return com.nachtraben.soundstage.core.SourceKey.forUrl(url);
+        return SourceKey.forUrl(url);
     }
 
     public void onLoadSucceeded(String url) {
-        breakers.recordSuccess(com.nachtraben.soundstage.core.SourceKey.forUrl(url));
+        breakers.recordSuccess(SourceKey.forUrl(url));
     }
 
     private void recordFailure(String source, String detail) {
@@ -479,14 +601,14 @@ public class TrackScheduler extends AudioEventAdapter {
         player.setPaused(true);
         String detail = lastFailureDetail;
         LOGGER.warn("Receiver at {} stopped after {} tracks in a row failed to play; the last: {}", pos,
-                com.nachtraben.soundstage.core.FailureBreaker.TRIP_THRESHOLD, detail);
+                FailureBreaker.TRIP_THRESHOLD, detail);
         if (level != null) {
-            AudioManager.get().broadcastMessage(pos, level, this, net.minecraft.network.chat.Component
-                    .literal("Playback stopped: " + com.nachtraben.soundstage.core.FailureBreaker.TRIP_THRESHOLD
+            AudioManager.get().broadcastMessage(pos, level, this, Component
+                    .literal("Playback stopped: " + FailureBreaker.TRIP_THRESHOLD
                             + " tracks in a row would not play. "
-                            + com.nachtraben.soundstage.core.LoadFailureMessage.forPlayer(lastFailureSource, detail)
+                            + LoadFailureMessage.forPlayer(lastFailureSource, detail)
                             + " Queue kept; press Play to try again.")
-                    .withStyle(net.minecraft.ChatFormatting.RED));
+                    .withStyle(ChatFormatting.RED));
         }
         syncMetadata();
     }
@@ -501,7 +623,7 @@ public class TrackScheduler extends AudioEventAdapter {
 
     public String loadingSuspendedReason(String url) {
         String source = sourceKeyFor(url);
-        return com.nachtraben.soundstage.core.LoadFailureMessage.suspended(source,
+        return LoadFailureMessage.suspended(source,
                 breakers.reason(source), breakers.remainingSeconds(source, System.currentTimeMillis()));
     }
 
@@ -519,11 +641,14 @@ public class TrackScheduler extends AudioEventAdapter {
         if (!isActiveSession()) {
             return;
         }
+        if (track instanceof VideoCapableTrack video) {
+            video.setSoundChoices(soundChoices);
+        }
         if (videoRelay != null) videoRelay.attach(track, artworkFor(track.getInfo()));
-        track.addMarker(new com.sedmelluq.discord.lavaplayer.track.TrackMarker(SILENT_FAILURE_MILLIS, state -> {
-            if (state == com.sedmelluq.discord.lavaplayer.track.TrackMarkerHandler.MarkerState.REACHED
-                    || state == com.sedmelluq.discord.lavaplayer.track.TrackMarkerHandler.MarkerState.BYPASSED
-                    || state == com.sedmelluq.discord.lavaplayer.track.TrackMarkerHandler.MarkerState.LATE) {
+        track.addMarker(new TrackMarker(SILENT_FAILURE_MILLIS, state -> {
+            if (state == TrackMarkerHandler.MarkerState.REACHED
+                    || state == TrackMarkerHandler.MarkerState.BYPASSED
+                    || state == TrackMarkerHandler.MarkerState.LATE) {
                 windowReachedBy = track;
             }
         }));
@@ -531,8 +656,12 @@ public class TrackScheduler extends AudioEventAdapter {
         reclaimedTrack = null;
         heldStream = null;
         currentTrackFailed = false;
-        LOGGER.info("Receiver at {} track started: {} (seekable={}, pendingSeek={})",
-                pos, track.getInfo().title, track.isSeekable(), pendingSeek);
+        if (imageChange(track)) {
+            LOGGER.debug("Receiver at {} shows the next image: {}", pos, track.getInfo().title);
+        } else {
+            LOGGER.info("Receiver at {} track started: {} (seekable={}, pendingSeek={})",
+                    pos, track.getInfo().title, track.isSeekable(), pendingSeek);
+        }
         seekTracker.clear();
         lastReportedPosition = 0;
         if (pendingSeek >= 0) {
@@ -551,24 +680,27 @@ public class TrackScheduler extends AudioEventAdapter {
         if (track == null || player.isPaused()) return;
         String identifier = track.getIdentifier();
         if (identifier != null && identifier.equals(lastAnnouncedIdentifier)) return;
+        boolean still = track instanceof VideoCapableTrack video && video.isStill();
+        boolean pictureFollowsPicture = still && lastAnnouncedStill;
         lastAnnouncedIdentifier = identifier;
-        broadcastNowPlaying(track);
+        lastAnnouncedStill = still;
+        if (!pictureFollowsPicture) broadcastNowPlaying(track);
     }
 
     private void broadcastNowPlaying(AudioTrack track) {
         if (level == null || track == null) return;
-        com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo info = track.getInfo();
-        com.nachtraben.soundstage.network.NowPlayingS2CPacket packet =
-                new com.nachtraben.soundstage.network.NowPlayingS2CPacket(pos,
+        AudioTrackInfo info = track.getInfo();
+        NowPlayingS2CPacket packet =
+                new NowPlayingS2CPacket(pos,
                         info.title == null ? "" : info.title,
                         info.author == null ? "" : info.author,
                         artworkFor(info));
         AudioManager.get().broadcastToNearby(pos, level, this,
-                player -> dev.armadeus.armalib.platform.network.Network.sendToPlayer(player, packet));
+                player -> Network.sendToPlayer(player, packet));
     }
 
-    private static String artworkFor(com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo info) {
-        String derived = com.nachtraben.soundstage.core.YoutubeThumbnail.forTrack(
+    private static String artworkFor(AudioTrackInfo info) {
+        String derived = YoutubeThumbnail.forTrack(
                 info.identifier, info.uri);
         if (!derived.isEmpty()) return derived;
         return info.artworkUrl == null ? "" : info.artworkUrl;
@@ -577,17 +709,6 @@ public class TrackScheduler extends AudioEventAdapter {
     private volatile boolean tearingDown = false;
 
     private volatile AudioTrack heldStream;
-
-    public boolean hasHeldStream() {
-        return heldStream != null;
-    }
-
-    public int heldStreamsDialled() {
-        return heldStreamsDialled.get();
-    }
-
-    private final java.util.concurrent.atomic.AtomicInteger heldStreamsDialled =
-            new java.util.concurrent.atomic.AtomicInteger();
 
     public AudioTrack takeHeldStream() {
         AudioTrack held = heldStream;
@@ -617,14 +738,14 @@ public class TrackScheduler extends AudioEventAdapter {
                 track.getInfo().author,
                 artworkFor(track.getInfo()),
                 trackPosition,
-                com.nachtraben.soundstage.core.TrackDuration.reported(track.getDuration()));
+                TrackDuration.reported(track.getDuration()));
 
         level.getServer().execute(() -> {
             if (!isActiveSession() || !AudioManager.get().isCurrentSession(level, pos, this)) {
                 return;
             }
-            if (com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, pos)
-                instanceof com.nachtraben.soundstage.block.IAudioReceiver cbe) {
+            if (WorldAccess.blockEntityIfLoaded(level, pos)
+                instanceof IAudioReceiver cbe) {
                 cbe.setCurrentTrackData(encoded);
                 cbe.setCurrentTrackPosition(trackPosition);
                 LOGGER.info("Receiver at {} reclaimed while idle; snapshotted at {}ms for revival.",
@@ -658,10 +779,10 @@ public class TrackScheduler extends AudioEventAdapter {
         if (!isActiveSession() || !AudioManager.get().isCurrentSession(level, pos, this)) {
             return;
         }
-        if (com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, pos)
-                instanceof com.nachtraben.soundstage.block.IAudioReceiver cbe) {
-            com.sedmelluq.discord.lavaplayer.track.AudioTrack current = player.getPlayingTrack();
-            if (current instanceof LiveInputTrack && !com.nachtraben.soundstage.RigStaging.fault("share-saved")) {
+        if (WorldAccess.blockEntityIfLoaded(level, pos)
+                instanceof IAudioReceiver cbe) {
+            AudioTrack current = player.getPlayingTrack();
+            if (current instanceof LiveInputTrack) {
                 cbe.setCurrentTrackData("");
                 cbe.setCurrentTrackPosition(0);
             } else if (current != null) {
@@ -671,7 +792,7 @@ public class TrackScheduler extends AudioEventAdapter {
                 cbe.setCurrentTrackData("");
                 cbe.setCurrentTrackPosition(0);
             }
-            java.util.List<String> dataList = new java.util.ArrayList<>();
+            List<String> dataList = new ArrayList<>();
             for (QueueEntry entry : getQueue()) {
                 if (!entry.encoded().isEmpty()) dataList.add(entry.encoded());
             }
@@ -699,7 +820,7 @@ public class TrackScheduler extends AudioEventAdapter {
         String artist = "";
         String thumbnail = "";
         boolean isPlaying = isActivelyPlaying();
-        
+
         List<String> queueTitles = new ArrayList<>();
         List<Long> queueIds = new ArrayList<>();
         for (QueueEntry entry : getQueue()) {
@@ -714,8 +835,8 @@ public class TrackScheduler extends AudioEventAdapter {
             title = track.getInfo().title;
             artist = track.getInfo().author;
             position = reportedPosition(track);
-            duration = com.nachtraben.soundstage.core.TrackDuration.reported(track.getDuration());
-            
+            duration = TrackDuration.reported(track.getDuration());
+
             thumbnail = artworkFor(track.getInfo());
         } else {
             ReclaimedTrack held = reclaimedTrack;
@@ -732,8 +853,8 @@ public class TrackScheduler extends AudioEventAdapter {
         boolean pictureEnabled;
         boolean levelling;
         int volume;
-        if (com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, pos)
-                instanceof com.nachtraben.soundstage.block.IAudioReceiver cbe) {
+        if (WorldAccess.blockEntityIfLoaded(level, pos)
+                instanceof IAudioReceiver cbe) {
             isLocked = cbe.isLocked();
             pictureEnabled = cbe.isPictureEnabled();
             levelling = cbe.isLevelling();
@@ -742,8 +863,11 @@ public class TrackScheduler extends AudioEventAdapter {
             return;
         }
 
-        boolean mediaFolderEnabled = com.nachtraben.soundstage.config.SoundstageConfig.enableMediaFolder();
-        SpeakerMetadataS2CPacket packet = new SpeakerMetadataS2CPacket(pos, title, artist, thumbnail, isPlaying, volume, queueTitles, queueIds, loopMode, shuffle, isLocked, position, duration, mediaFolderEnabled, pictureEnabled, levelling);
+        boolean mediaFolderEnabled = SoundstageConfig.enableMediaFolder();
+        AudioChoice.Offer audio = audioOffer(track);
+        SpeakerMetadataS2CPacket packet = new SpeakerMetadataS2CPacket(pos, title, artist, thumbnail, isPlaying, volume,
+                queueTitles, queueIds, loopMode, shuffle, isLocked, position, duration, mediaFolderEnabled,
+                pictureEnabled, levelling, audio);
         NetworkHandler.sendMetadataToTracking(level, pos, packet);
     }
 }

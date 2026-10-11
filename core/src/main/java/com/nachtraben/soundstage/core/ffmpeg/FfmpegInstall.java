@@ -27,6 +27,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
@@ -180,11 +181,13 @@ public final class FfmpegInstall {
             }
         }
         if (count[0] != build.size()) {
-            throw new IOException("the download ended at " + count[0] + " of the " + build.size() + " bytes pinned for it");
+            throw new IOException("the download ended at " + count[0] + " of the " + build.size()
+                    + " bytes pinned for it");
         }
         String sha256 = HexFormat.of().formatHex(digest.digest());
         if (!sha256.equals(build.sha256())) {
-            throw new IOException("the download's SHA-256 is " + sha256 + ", not the " + build.sha256() + " pinned for it");
+            throw new IOException("the download's SHA-256 is " + sha256 + ", not the " + build.sha256()
+                    + " pinned for it");
         }
     }
 
@@ -195,7 +198,8 @@ public final class FfmpegInstall {
         record.setProperty("ffmpeg", "bin/" + build.ffmpegName());
         record.setProperty("ffprobe", "bin/" + build.ffprobeName());
         try (Writer out = Files.newBufferedWriter(home.resolve(RECORD))) {
-            record.store(out, "An ffmpeg Soundstage downloaded and ran. Delete this directory to have it fetched again.");
+            record.store(out,
+                    "An ffmpeg Soundstage downloaded and ran. Delete this directory to have it fetched again.");
         }
     }
 
@@ -206,7 +210,8 @@ public final class FfmpegInstall {
         Path ffmpeg = inside(home, record.getProperty("ffmpeg"));
         Path ffprobe = inside(home, record.getProperty("ffprobe"));
         if (version == null || ffmpeg == null || ffprobe == null) return Optional.empty();
-        if (!Files.isRegularFile(ffmpeg, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(ffprobe, LinkOption.NOFOLLOW_LINKS)) {
+        if (!Files.isRegularFile(ffmpeg, LinkOption.NOFOLLOW_LINKS)
+                || !Files.isRegularFile(ffprobe, LinkOption.NOFOLLOW_LINKS)) {
             return Optional.empty();
         }
         return Optional.of(new Installed(home, ffmpeg, ffprobe, version));
@@ -279,7 +284,7 @@ public final class FfmpegInstall {
 
     static boolean allowedHost(String host) {
         if (host == null) return false;
-        String h = host.toLowerCase(java.util.Locale.ROOT);
+        String h = host.toLowerCase(Locale.ROOT);
         return h.equals("github.com") || h.endsWith(".githubusercontent.com");
     }
 

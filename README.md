@@ -51,7 +51,8 @@ speaker, and sculk sensors hear it the way they hear a jukebox.
 
 The receiver's screen has five tabs:
 
-- **Playing**: what's on, the controls, volume, loop and shuffle.
+- **Playing**: what's on, the controls, volume, loop and shuffle, and the audio language when a film
+  or video has more than one.
 - **Queue**: reorder, remove, or play from any point. Shuffle never loses the order you made.
 - **Displays**: the screens linked to it, and the Video switch.
 - **Speakers**: the linked speakers and the channel each one plays.
@@ -66,8 +67,23 @@ music too, which is why it's a switch and starts off.
 **Video**, on the Displays tab, turns a receiver's picture off when you only want the sound of
 something; its screens then show a now-playing card instead.
 
+**Audio language**: a film with several audio tracks, or a YouTube video with dubs, gets a dropdown at
+the end of the Playing tab's artist line. Pick a language and the receiver keeps it for everything that
+plays after, falling back to each one's own track where that language isn't there; **Default** goes
+back to each one's own track. Commentary and audio-description tracks can be picked for the film
+playing. Changing language plays from where you are, after a moment's pause.
+
 **Lock** stops anyone but you (and server operators) from changing a receiver, its speakers or its
 screens. Whoever places a receiver or party box owns it.
+
+### The Remote
+
+Craft a **Remote** from a stone button over redstone over a copper ingot. Sneak and use it on an A/V
+receiver to link it; after that, using it within 96 blocks of that receiver, in the same dimension,
+opens its screen, as long as the receiver is within your own view distance (when your render distance
+and the server's view distance are both 6 or more, 96 blocks always is). It answers to the receiver's
+lock, both for linking and for opening. It takes on the linked receiver's trim, and its keys and power
+lamp light up as the receiver's do. Put it alone in a crafting grid to unlink it.
 
 ## What it can play
 
@@ -91,6 +107,11 @@ while a display is linked; YouTube live streams are the exception and play sound
 anything played with Video switched off, get a now-playing card instead, with the artwork, a spectrum
 and the time.
 
+Displays also work as signs. A video with no sound plays its picture on its own, and a PNG or JPEG
+(`media:poster.png`, or a link to one) shows as a still picture. An image alone in the queue stays up
+until it's skipped; with anything queued after it, it moves on after `imageDisplaySeconds` (10 by
+default), so a looped queue of images is a slideshow. Images up to 8192 by 8192 pixels.
+
 Right-click a screen with an empty hand for its menu. There you can turn subtitles on or off and pick
 their size (that's just for you), choose which subtitle track plays, choose **Fit** or **Fill** for the
 whole display, or unlink it. The receiver's Displays tab has the same choices.
@@ -104,12 +125,35 @@ A few details:
 - HDR films are tone-mapped so they don't look grey and washed out.
 - A film's 5.1 track plays through a 5.1 room: link a Center Speaker or a pair of surround speakers
   and each channel goes to its own speaker. Without them you get the film's stereo mix.
-- The picture is made to suit the display, 120 lines per block of height, up to the server's limit
-  (480 lines by default). Every player decodes the picture on their own computer, so taller costs
-  everyone more.
-- A screen nobody is looking at doesn't decode anything. The sound carries on regardless.
+- The picture is made to suit the display, 240 lines per block of height (a three-block display gets
+  720p), up to the server's limit, `maxVideoHeight`: 1080 lines by default, which is also the most.
+  Every player decodes the picture on their own computer and receives it from the server, about
+  4 Mbit/s at 720p and 6 at 1080p, so taller costs everyone more.
+- A screen nobody is looking at isn't sent or decoded. The sound carries on regardless. When a player
+  turns back to it, the server sends the picture from its last keyframe, so it shows at once.
+- If the server can't keep up, the picture gets smaller (1080p, then 720p, then 480p) before the sound
+  can stutter, and at worst the screen shows what's playing instead. That receiver's next tracks start
+  at the smaller size for ten minutes after its last step down, so a playlist doesn't stutter at the
+  start of every track.
+- How many receivers make a picture at once depends on the server's spare processor time. A new picture
+  starts only when the running ones are keeping ahead of playback and the processors aren't busy (Linux's
+  pressure stall information, or the processor load elsewhere), one at a time, a few seconds apart.
+  `maxPicturesEncoding` adds a fixed ceiling.
+- Every picture is sent as H.264 (Main profile, no B-frames, a keyframe at least every two seconds, at
+  most 30 frames a second), whatever the source was. Players decode it in Java on spare processor
+  threads (all but two of the computer's, at most four and at least one) at low priority. A computer
+  that falls behind shows one picture every two seconds or so, still in step with the sound, and tries
+  full motion again shortly after. It does the same when decoding makes the game's frames more than 10%
+  slower.
+- A Twitch stream's picture is passed through untouched when Twitch already sends it in that format,
+  as its lower qualities usually are. Otherwise ffmpeg converts it, which costs the server like any
+  other picture. Streams using Twitch's enhanced broadcasting are repackaged so they play at all.
+- A video file whose sound the built-in player can't read plays through ffmpeg instead, sound and
+  picture together.
+- The picture is smoothed for distance on the graphics card (mipmaps), on OpenGL and Vulkan alike.
 
-Pictures need ffmpeg on the server, except for Twitch, which is passed through as it comes. Without
+Pictures, images and other audio languages need ffmpeg on the server, except for Twitch, whose
+picture is passed through when it's already in a format every player can show. Without
 ffmpeg, YouTube and most files still play, sound only.
 
 ## Sharing your own audio
@@ -158,7 +202,9 @@ you accept by turning them on (or by leaving them on), so read these before chan
 
 Other useful settings: per-source switches (`enableYoutube`, `enableSoundCloud` and so on), URL allow
 and deny lists, queue and playlist limits, `maxPlayingReceivers` (how many receivers may play at
-once, 16 by default), `enableVideo` and `maxVideoHeight`.
+once, 16 by default), `enableVideo`, `maxVideoHeight`, `maxPicturesEncoding` (a fixed limit on how many
+receivers make a picture at once; 0, the default, lets the server's spare processor time decide) and
+`imageDisplaySeconds`.
 
 ### ffmpeg
 
@@ -191,8 +237,8 @@ or endorsed by any of these services.
 decide what goes in it, so only put files there that you're allowed to share with your players.
 
 **Direct links and your network.** `enableHttp` lets players have your server fetch any public web
-address they give it, and `allowPrivateNetworkHosts` lets operators reach machines on your own network. Both are off unless
-you turn them on, and what they reach once you do is your responsibility.
+address they give it, and `allowPrivateNetworkHosts` lets operators reach machines on your own
+network. Both are off unless you turn them on, and what they reach once you do is your responsibility.
 
 **ffmpeg** is a separate program with its own licence. Soundstage only downloads it when you turn that
 on, only from the release it was built against, and only keeps it if the hash matches.
@@ -216,7 +262,8 @@ Soundstage runs on Windows, Linux and macOS (Apple Silicon too). On macOS:
 - Dolby Vision profile 5 films play with their colours off. Other Dolby Vision profiles are fine.
 - Two players watching one screen can be a few milliseconds apart from each other. Each sees the
   picture in step with what they hear.
-- Files with no sound at all are refused, because the sound is what times the picture.
+- A file with neither sound nor picture is refused. A video with no sound plays its picture on a silent
+  soundtrack, which needs ffmpeg.
 
 ## Troubleshooting
 
@@ -227,11 +274,36 @@ turn on `downloadFfmpeg`. The server log says which it found.
 An operator can run `/soundstage oauth` and follow the link with a spare Google account. In
 singleplayer the prompt opens by itself.
 
-**Every YouTube, SoundCloud, Bandcamp, Vimeo or Twitch load fails, and the log says a host "resolved
-only to non-public addresses".** Something on the server's network is answering those names with a
-private address, usually a fake-IP DNS proxy (Clash, mihomo, sing-box or Surge in TUN mode, which
-answer from 198.18.0.0/15). Give the server a real DNS resolver, or keep the Java process out of the
-proxy's fake-IP mode. There's no setting to allow it.
+## For pack and mod authors
+
+Soundstage has no Java API for other mods; its classes are internal and change between versions. What other mods,
+data packs and resource packs can rely on:
+
+- **`#soundstage:speaker_casing`** (block tag): the blocks a player can right-click onto a speaker or receiver as its
+  casing. It ships logs, planks, terracotta, every concrete colour, glass, tinted glass and every stained glass, and
+  does not replace other packs' entries. A cabinet is drawn from the block's own side texture, and is see-through
+  when the block is, so a modded glass works. Grilles take any block in vanilla's `#minecraft:wool`.
+- **`#soundstage:music_source`** (block tag): blocks parrots and allays dance to, beside the jukebox. It ships the
+  five speakers. A block of another mod added to it keeps parrots and allays dancing within vanilla's jukebox
+  distance; allays start when that block raises `minecraft:jukebox_play`, and parrots when it plays the jukebox's
+  level event, as a jukebox does. The speaker's own range applies to Soundstage's speakers only.
+- **Game events:** every speaker that is playing raises `minecraft:jukebox_play` at its position once a second, and
+  `minecraft:jukebox_stop_play` when it stops, so sculk sensors and other mods' listeners hear it as a jukebox.
+- **Item data components** (item NBT on 1.20.1): `soundstage:speaker_finish` (`casing` and `grille`, block ids) on
+  speaker, receiver and remote items; `soundstage:speaker_settings` (`channel_mode`, `pitch`, `yaw_offset`, `range`,
+  `delay_ms`, `volume_percent`) on speaker items; `soundstage:remote_link` (a dimension and position) on a linked
+  remote. A stack carrying a finish is drawn in it.
+- **Recipes and loot tables** are ordinary data under the `soundstage` namespace and can be replaced. A replacement
+  speaker loot table must copy `soundstage:speaker_finish`, `soundstage:speaker_settings` and the `grille` block
+  property, or a broken speaker drops plain. 26.3 uses the newer loot table field names.
+- **Resource packs** can replace the textures under `assets/soundstage/textures/`, the language files and the
+  subtitle font (`assets/soundstage/font/subtitle.json`). Speakers, the receiver, the remote and screens are drawn in
+  code, so block and item models only affect particles and the fallback item look. The block texture `white` must
+  stay a plain white 16x16 image.
+- **Sound:** speakers play streamed audio in the Jukebox/Note Blocks (`records`) volume category. There are no sound
+  events to replace.
+- **Files:** the server's settings are in `config/soundstage.aon`, a player's display preferences in
+  `config/soundstage-client.aon`; files in the `soundstage-media` folder play as `media:<name>`.
 
 ## Building
 

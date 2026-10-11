@@ -1,19 +1,21 @@
 package com.nachtraben.soundstage.core.video;
 
+import java.util.function.BooleanSupplier;
+
 public final class SurroundBuffer {
 
     public static final int CHANNELS = 6;
     public static final int SAMPLE_RATE = 48_000;
     public static final int CAPACITY_SAMPLES = SAMPLE_RATE * 8;
 
-    private volatile java.util.function.BooleanSupplier wanted = () -> false;
+    private volatile BooleanSupplier wanted = () -> false;
     private short[] ring;
     private int generation;
     private long firstSample;
     private long endSample;
     private boolean running;
 
-    public void setWanted(java.util.function.BooleanSupplier wanted) {
+    public void setWanted(BooleanSupplier wanted) {
         this.wanted = wanted;
     }
 

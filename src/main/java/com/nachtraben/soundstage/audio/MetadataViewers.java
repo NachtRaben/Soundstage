@@ -1,8 +1,11 @@
 package com.nachtraben.soundstage.audio;
 
+import com.nachtraben.soundstage.block.IAudioReceiver;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,11 +18,9 @@ public final class MetadataViewers {
 
     private MetadataViewers() {}
 
-    private static final int VIEW_RANGE = 96;
-
     private static final Map<Key, Set<UUID>> VIEWERS = new ConcurrentHashMap<>();
 
-    private record Key(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension, long pos) {}
+    private record Key(ResourceKey<Level> dimension, long pos) {}
 
     private static Key keyOf(ServerLevel level, BlockPos pos) {
         return new Key(level.dimension(), pos.asLong());
@@ -53,11 +54,10 @@ public final class MetadataViewers {
         }
 
         List<ServerPlayer> out = new ArrayList<>(viewers.size());
-        double rangeSqr = (double) VIEW_RANGE * VIEW_RANGE;
         for (UUID id : viewers) {
             ServerPlayer player = level.getServer().getPlayerList().getPlayer(id);
             if (player == null || player.level() != level
-                    || player.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) > rangeSqr) {
+                    || !IAudioReceiver.withinControlRange(player, pos)) {
                 viewers.remove(id);
                 continue;
             }

@@ -45,7 +45,8 @@ public final class ScreenedConnections {
             if (host.getAddress() != null) {
                 addresses = screen.resolve(host.getAddress().getHostAddress());
                 if (addresses.length == 0 || !addresses[0].equals(host.getAddress())) {
-                    throw new PrivateAddressRefusedException(host.getAddress().getHostAddress() + " was refused", false);
+                    throw new PrivateAddressRefusedException(host.getAddress().getHostAddress()
+                            + " was refused", false);
                 }
             } else {
                 addresses = screen.resolve(host.getHostName());

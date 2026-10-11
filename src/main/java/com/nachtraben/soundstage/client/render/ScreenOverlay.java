@@ -54,26 +54,16 @@ public final class ScreenOverlay {
 
     private static final List<Picture> PENDING = new ArrayList<>();
 
-    private static long draws;
-
     private ScreenOverlay() {
     }
 
     public static boolean active() {
-        return SoundstageRenderTypes.videoProgramInUse() == SoundstageRenderTypes.VideoProgram.OVERLAY
-                && IrisCompat.isShaderPackInUse() && !IrisCompat.isRenderingShadows();
+        return IrisCompat.isShaderPackInUse() && !IrisCompat.isRenderingShadows();
     }
 
     public static boolean ownsCaptions() {
-        return SoundstageRenderTypes.videoProgramInUse() == SoundstageRenderTypes.VideoProgram.OVERLAY
-                && IrisCompat.isShaderPackInUse();
+        return IrisCompat.isShaderPackInUse();
     }
-
-    public static long draws() {
-        return draws;
-    }
-
-    private static long captionDraws;
 
     //? if >=26.2 {
     /*private static StagedVertexBuffer staged;
@@ -89,10 +79,6 @@ public final class ScreenOverlay {
         return draw;
     }
     *///?}
-
-    public static long captionDraws() {
-        return captionDraws;
-    }
 
     static void record(ResourceLocation texture, float[] xyz, float[] uv) {
         if (PENDING.size() >= MAX_PENDING) PENDING.clear();
@@ -114,13 +100,13 @@ public final class ScreenOverlay {
         try {
             stack.set(modelView);
             for (Picture picture : PENDING) {
-                VertexConsumer consumer = staged.getVertexBuilder(stage(SoundstageRenderTypes.screenOverlay(picture.texture())));
+                VertexConsumer consumer =
+                        staged.getVertexBuilder(stage(SoundstageRenderTypes.screenOverlay(picture.texture())));
                 float[] xyz = picture.xyz();
                 float[] uv = picture.uv();
                 for (int i = 0; i < 4; i++) {
                     consumer.addVertex(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]).setUv(uv[i * 2], uv[i * 2 + 1]);
                 }
-                draws++;
             }
             for (Caption caption : PENDING_CAPTIONS) {
                 GLYPH_DRAWS.clear();
@@ -132,9 +118,11 @@ public final class ScreenOverlay {
                         RenderLight.FULL_BRIGHT, false);
                 ^///?} else {
                 ScreenBlockEntityRenderer.captionBox(caption.matrix(),
-                        staged.getVertexBuilder(stage(SoundstageRenderTypes.textBackground())), mc.font.width(caption.text()));
+                        staged.getVertexBuilder(stage(SoundstageRenderTypes.textBackground())),
+                        mc.font.width(caption.text()));
                 //?}
-                mc.font.prepareText(caption.text(), 0, 0, caption.color(), false, false, 0).visit(new Font.GlyphVisitor() {
+                mc.font.prepareText(caption.text(), 0, 0, caption.color(), false, false, 0)
+                        .visit(new Font.GlyphVisitor() {
                     @Override
                     public void acceptRenderable(net.minecraft.client.gui.font.TextRenderable glyph) {
                         net.minecraft.client.renderer.RenderType type = glyph.renderType(Font.DisplayMode.NORMAL);
@@ -142,7 +130,6 @@ public final class ScreenOverlay {
                         glyph.render(caption.matrix(), staged.getVertexBuilder(draw), RenderLight.FULL_BRIGHT, false);
                     }
                 });
-                captionDraws++;
             }
             staged.upload();
             for (int i = 0; i < STAGED_DRAWS.size(); i++) {
@@ -150,7 +137,8 @@ public final class ScreenOverlay {
                 if (info == null) continue;
                 //? if >=26.3 {
                 /^var target = mc.gameRenderer.mainRenderTarget();
-                try (var pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "Soundstage screen overlay",
+                try (var pass = RenderSystem.getDevice().createCommandEncoder()
+                        .createRenderPass(() -> "Soundstage screen overlay",
                         target.getColorTextureView(), java.util.Optional.empty(),
                         target.hasDepth() ? target.getDepthTextureView() : null, java.util.OptionalDouble.empty())) {
                     RenderSystem.bindDefaultUniforms(pass);
@@ -176,14 +164,14 @@ public final class ScreenOverlay {
         try {
             stack.set(modelView);
             for (Picture picture : PENDING) {
-                BufferBuilder builder = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
+                BufferBuilder builder =
+                        Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
                 float[] xyz = picture.xyz();
                 float[] uv = picture.uv();
                 for (int i = 0; i < 4; i++) {
                     builder.addVertex(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]).setUv(uv[i * 2], uv[i * 2 + 1]);
                 }
                 SoundstageRenderTypes.screenOverlay(picture.texture()).draw(builder.buildOrThrow());
-                draws++;
             }
             if (!PENDING_CAPTIONS.isEmpty()) {
                 MultiBufferSource.BufferSource text = mc.renderBuffers().bufferSource();
@@ -194,7 +182,6 @@ public final class ScreenOverlay {
                             text, Font.DisplayMode.NORMAL, 0, RenderLight.FULL_BRIGHT);
                 }
                 text.endBatch();
-                captionDraws += PENDING_CAPTIONS.size();
             }
         } finally {
             PENDING.clear();
@@ -202,7 +189,7 @@ public final class ScreenOverlay {
             stack.popMatrix();
         }
         *///?} else {
-        
+
         Minecraft mc = Minecraft.getInstance();
         //? if >=1.21 {
         Matrix4fStack stack = RenderSystem.getModelViewStack();
@@ -238,7 +225,7 @@ public final class ScreenOverlay {
             for (Picture picture : PENDING) {
                 AbstractTexture texture = mc.getTextureManager().getTexture(picture.texture());
                 RenderSystem.setShaderTexture(0, picture.texture());
-                texture.setFilter(true, false);
+                texture.setFilter(true, true);
                 float[] xyz = picture.xyz();
                 float[] uv = picture.uv();
                 //? if >=1.21 {
@@ -256,7 +243,6 @@ public final class ScreenOverlay {
                 }
                 BufferUploader.drawWithShader(builder.end());
                 *///?}
-                draws++;
             }
 
             if (!PENDING_CAPTIONS.isEmpty()) {
@@ -272,13 +258,13 @@ public final class ScreenOverlay {
                     box.finish();
                     *///?} else {
                     ScreenBlockEntityRenderer.captionBox(caption.matrix(),
-                            textBuffer.getBuffer(SoundstageRenderTypes.textBackground()), mc.font.width(caption.text()));
+                            textBuffer.getBuffer(SoundstageRenderTypes.textBackground()),
+                            mc.font.width(caption.text()));
                     //?}
                     mc.font.drawInBatch(caption.text(), 0, 0, caption.color(), false, caption.matrix(),
                             textBuffer, Font.DisplayMode.NORMAL, 0, RenderLight.FULL_BRIGHT);
                 }
                 textBuffer.endBatch();
-                captionDraws += PENDING_CAPTIONS.size();
                 RenderSystem.disableBlend();
                 RenderSystem.polygonOffset(-1f, -4f);
             }

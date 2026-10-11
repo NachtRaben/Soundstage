@@ -1,5 +1,7 @@
 package com.nachtraben.soundstage.core;
 
+import org.slf4j.LoggerFactory;
+
 import java.util.concurrent.ConcurrentSkipListMap;
 
 public final class TraceBuffer {
@@ -18,13 +20,11 @@ public final class TraceBuffer {
         if (newest != null && sequence < newest - retainedFrames) {
             if (!reportedRenumber) {
                 reportedRenumber = true;
-                org.slf4j.LoggerFactory.getLogger("Soundstage").info(
-                        "SOUNDSTAGE-TRACE-RENUMBER: incoming={} newest={} held={} resetting={}",
-                        sequence, newest, frames.size(), !RigFaults.on("no-trace-renumber"));
+                LoggerFactory.getLogger("Soundstage").debug(
+                        "SOUNDSTAGE-TRACE-RENUMBER: incoming={} newest={} held={} resetting=true",
+                        sequence, newest, frames.size());
             }
-            if (!RigFaults.on("no-trace-renumber")) {
-                frames.clear();
-            }
+            frames.clear();
         } else {
             reportedRenumber = false;
         }

@@ -4,7 +4,7 @@ import java.util.ArrayDeque;
 
 public final class VideoUnitQueue {
 
-    public static final long DECODE_AHEAD_MILLIS = 150;
+    public static final long DECODE_AHEAD_MILLIS = 250;
     public static final long SKIP_BEHIND_MILLIS = 1000;
 
     static final int MAX_UNITS = 1800;
@@ -25,22 +25,43 @@ public final class VideoUnitQueue {
     }
 
     public Unit next(double clockMillis) {
+        return next(clockMillis, DECODE_AHEAD_MILLIS);
+    }
+
+    public Unit next(double clockMillis, long aheadMillis) {
         dropUntilKeyframe();
         Unit head = units.peekFirst();
         if (head == null || Double.isNaN(clockMillis)) return null;
         if (clockMillis - head.ptsMillis() > SKIP_BEHIND_MILLIS && skipTo(clockMillis)) {
             head = units.peekFirst();
         }
-        if (head.ptsMillis() > clockMillis + DECODE_AHEAD_MILLIS) return null;
+        if (head.ptsMillis() > clockMillis + aheadMillis) return null;
         return poll();
     }
 
+    public Unit nextKeyframe(double clockMillis) {
+        if (Double.isNaN(clockMillis)) return null;
+        while (!units.isEmpty()) {
+            Unit head = units.peekFirst();
+            if (head.keyframe() && head.ptsMillis() >= clockMillis) {
+                awaitingKeyframe = false;
+                return poll();
+            }
+            poll();
+        }
+        return null;
+    }
+
     public double millisUntilDue(double clockMillis) {
+        return millisUntilDue(clockMillis, DECODE_AHEAD_MILLIS);
+    }
+
+    public double millisUntilDue(double clockMillis, long aheadMillis) {
         Unit head = units.peekFirst();
         if (head == null || awaitingKeyframe && !head.keyframe() || Double.isNaN(clockMillis)) {
             return Double.POSITIVE_INFINITY;
         }
-        return Math.max(0.0, head.ptsMillis() - DECODE_AHEAD_MILLIS - clockMillis);
+        return Math.max(0.0, head.ptsMillis() - aheadMillis - clockMillis);
     }
 
     public void keepFromLatestKeyframe(double clockMillis) {

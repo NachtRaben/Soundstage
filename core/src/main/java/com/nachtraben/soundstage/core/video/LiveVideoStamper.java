@@ -8,9 +8,11 @@ public final class LiveVideoStamper implements TsDemuxer.Listener {
 
     public static final long DISCONTINUITY_MILLIS = 200;
 
-    static final int MAX_ANCHORS = 256;
+    static final long KEPT_ANCHOR_TICKS = 15 * 90_000L;
 
-    static final int DEFAULT_SAMPLE_RATE = 48_000;
+    static final int MAX_ANCHORS = 8_192;
+
+    public static final int DEFAULT_SAMPLE_RATE = 48_000;
 
     private static final long WRAP = 1L << 33;
     private static final long MAX_SKEW_TICKS = MAX_SKEW_MILLIS * 90;
@@ -21,6 +23,9 @@ public final class LiveVideoStamper implements TsDemuxer.Listener {
         void restart(long startMillis);
 
         void stamped(long ptsMillis, VideoAccessUnit unit);
+
+        default void discontinuity() {
+        }
     }
 
     private record Anchor(long pts, long framesBefore) {}
@@ -32,6 +37,7 @@ public final class LiveVideoStamper implements TsDemuxer.Listener {
     private int configuration = -1;
     private int sampleRate = DEFAULT_SAMPLE_RATE;
     private long frames;
+    private long stretchStartFrames;
     private long expectedPts;
     private boolean heardAudio;
     private boolean awaitingKeyframe = true;
@@ -45,29 +51,35 @@ public final class LiveVideoStamper implements TsDemuxer.Listener {
     }
 
     @Override
-    public void onAudio(long pts90k, int adtsFrameCount) {
+    public synchronized void onAudio(long pts90k, int adtsFrameCount) {
         onAudio(pts90k, adtsFrameCount, 0, -1);
     }
 
     @Override
-    public void onAudio(long pts90k, int adtsFrameCount, int rate, int format) {
+    public synchronized void onAudio(long pts90k, int adtsFrameCount, int rate, int format) {
         if (format != -1 && configuration != -1 && format != configuration) {
             restarts++;
             frames = 0;
+            stretchStartFrames = 0;
             anchors.clear();
             awaitingKeyframe = true;
             output.restart(0);
         } else if (heardAudio && Math.abs(signed33(pts90k - expectedPts)) > DISCONTINUITY_TICKS) {
             discontinuities++;
+            stretchStartFrames = frames;
             anchors.clear();
             awaitingKeyframe = true;
+            output.discontinuity();
         }
         if (format != -1) configuration = format;
         if (rate > 0) sampleRate = rate;
         heardAudio = true;
 
         anchors.addLast(new Anchor(pts90k, frames));
-        if (anchors.size() > MAX_ANCHORS) anchors.removeFirst();
+        while (anchors.size() > MAX_ANCHORS
+                || anchors.size() > 1 && signed33(pts90k - anchors.peekFirst().pts()) > KEPT_ANCHOR_TICKS) {
+            anchors.removeFirst();
+        }
         frames += adtsFrameCount;
         expectedPts = (pts90k + framesToTicks(adtsFrameCount)) & (WRAP - 1);
 
@@ -83,7 +95,7 @@ public final class LiveVideoStamper implements TsDemuxer.Listener {
     }
 
     @Override
-    public void onVideo(VideoAccessUnit unit) {
+    public synchronized void onVideo(VideoAccessUnit unit) {
         Anchor anchor = anchors.isEmpty() ? null : anchorFor(unit.pts90k());
         if (anchor == null) {
             if (held.size() == VideoStamper.MAX_HELD) {
@@ -100,19 +112,50 @@ public final class LiveVideoStamper implements TsDemuxer.Listener {
         place(unit, anchor);
     }
 
-    public boolean heardAudio() {
+    public synchronized void placeLate(VideoAccessUnit unit) {
+        Anchor latest = anchors.peekLast();
+        if (latest == null || signed33(unit.pts90k() - latest.pts()) > MAX_SKEW_TICKS) {
+            drop();
+            return;
+        }
+        Anchor found = null;
+        var descending = anchors.descendingIterator();
+        while (descending.hasNext()) {
+            Anchor anchor = descending.next();
+            if (signed33(unit.pts90k() - anchor.pts()) >= 0) {
+                found = anchor;
+                break;
+            }
+        }
+        Anchor first = anchors.peekFirst();
+        if (found == null && first.framesBefore() == stretchStartFrames
+                && signed33(first.pts() - unit.pts90k()) <= MAX_SKEW_TICKS) {
+            found = first;
+        }
+        if (found == null) {
+            drop();
+            return;
+        }
+        place(unit, found);
+    }
+
+    public synchronized void gap() {
+        drop();
+    }
+
+    public synchronized boolean heardAudio() {
         return heardAudio;
     }
 
-    public int discontinuities() {
+    public synchronized int discontinuities() {
         return discontinuities;
     }
 
-    public int restarts() {
+    public synchronized int restarts() {
         return restarts;
     }
 
-    public int dropped() {
+    public synchronized int dropped() {
         return dropped;
     }
 

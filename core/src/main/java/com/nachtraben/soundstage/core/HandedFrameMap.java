@@ -51,7 +51,6 @@ public final class HandedFrameMap {
     private long handedEndGroup;
 
     private long retiredSamples;
-    private long handedSamples;
 
     private double locatedGroupSample = Double.NaN;
     private double locatedContentSample = Double.NaN;
@@ -87,7 +86,6 @@ public final class HandedFrameMap {
         queued.addLast(new Buffer(samples, frames,
                 Arrays.copyOf(pendingGroup, frames), Arrays.copyOf(pendingContent, frames),
                 Arrays.copyOf(pendingAdvances, frames)));
-        handedSamples += samples;
         if (frames > 0) {
             int last = frames - 1;
             anyHanded = true;
@@ -120,10 +118,6 @@ public final class HandedFrameMap {
 
     public long retiredSamples() {
         return retiredSamples;
-    }
-
-    public long handedSamples() {
-        return handedSamples;
     }
 
     public double handedEndSample() {
@@ -202,21 +196,6 @@ public final class HandedFrameMap {
             offset += buffer.samples - (double) buffer.frames * FRAME_SAMPLES;
         }
         return Double.NaN;
-    }
-
-    public double legacyGroupSampleAt(double queueOffset, long firstSequence, int realisedDelayFrames) {
-        return firstSequence * (double) FRAME_SAMPLES + retiredSamples + queueOffset
-                + realisedDelayFrames * (double) FRAME_SAMPLES;
-    }
-
-    public double legacyHandedEndSample(long firstSequence, int realisedDelayFrames) {
-        return firstSequence * (double) FRAME_SAMPLES + handedSamples
-                + realisedDelayFrames * (double) FRAME_SAMPLES;
-    }
-
-    public double legacyQueueOffsetOf(double groupSample, long firstSequence, int realisedDelayFrames) {
-        return groupSample - realisedDelayFrames * (double) FRAME_SAMPLES
-                - firstSequence * (double) FRAME_SAMPLES;
     }
 
     private void append(long group, long content, boolean advances) {

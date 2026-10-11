@@ -3,6 +3,8 @@ package com.nachtraben.soundstage.audio.media;
 import com.nachtraben.soundstage.config.SoundstageConfig;
 import com.nachtraben.soundstage.core.ffmpeg.FfmpegBuild;
 import com.nachtraben.soundstage.core.ffmpeg.FfmpegInstall;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 
@@ -10,13 +12,9 @@ public final class FfmpegDownload {
 
     public static final String DIRECTORY = "soundstage-ffmpeg";
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     public enum State { IDLE, CHECKING, DOWNLOADING, READY, FAILED, NOT_NEEDED }
-
-    private static boolean rigForce() {
-        return com.nachtraben.soundstage.RigStaging.fault("ffmpeg-force-download");
-    }
 
     private static final Object LOCK = new Object();
     private static volatile Path serverDirectory;
@@ -37,7 +35,7 @@ public final class FfmpegDownload {
 
     static void requestIfWanted() {
         Path directory = serverDirectory;
-        if (directory == null || !(rigForce() || SoundstageConfig.downloadFfmpeg())) return;
+        if (directory == null || !SoundstageConfig.downloadFfmpeg()) return;
         synchronized (LOCK) {
             if (directory.equals(checked)) return;
             checked = directory;
@@ -50,7 +48,8 @@ public final class FfmpegDownload {
 
     static String ffmpeg() {
         Path ffmpeg = managed;
-        return ffmpeg != null && serverDirectory != null && serverDirectory.equals(managedFor) ? ffmpeg.toString() : null;
+        return ffmpeg != null && serverDirectory != null && serverDirectory.equals(managedFor)
+                ? ffmpeg.toString() : null;
     }
 
     public static State state() {
@@ -63,7 +62,8 @@ public final class FfmpegDownload {
 
     static String hint() {
         return switch (state) {
-            case CHECKING, DOWNLOADING -> "Soundstage is downloading one (downloadFfmpeg); pictures start once it is ready.";
+            case CHECKING, DOWNLOADING ->
+                    "Soundstage is downloading one (downloadFfmpeg); pictures start once it is ready.";
             case FAILED -> "downloadFfmpeg is on, but the download did not work; the reason was logged above.";
             default -> "Install ffmpeg, set ffmpegPath in the Soundstage config, or turn on downloadFfmpeg to "
                     + "have Soundstage download a copy.";
@@ -79,7 +79,7 @@ public final class FfmpegDownload {
                 state = State.NOT_NEEDED;
                 return;
             }
-            if (!rigForce() && Ffmpeg.runs(Ffmpeg.DEFAULT_PATH)) {
+            if (Ffmpeg.runs(Ffmpeg.DEFAULT_PATH)) {
                 LOGGER.info("Soundstage: downloadFfmpeg is on, but ffmpeg already runs from this server's PATH; "
                         + "nothing is downloaded.");
                 state = State.NOT_NEEDED;
@@ -92,12 +92,6 @@ public final class FfmpegDownload {
                         System.getProperty("os.name"), System.getProperty("os.arch"));
                 state = State.FAILED;
                 return;
-            }
-            if (com.nachtraben.soundstage.RigStaging.fault("ffmpeg-bad-pin")) {
-                LOGGER.warn("Soundstage: red control — the ffmpeg build is pinned to a hash no archive has "
-                        + "(ffmpeg-bad-pin)");
-                build = new FfmpegBuild(build.id(), build.version(), build.url(), "0".repeat(64), build.size(),
-                        build.archive(), build.root());
             }
             Path home = directory.resolve(DIRECTORY);
             FfmpegBuild pinned = build;

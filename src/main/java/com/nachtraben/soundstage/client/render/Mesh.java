@@ -3,6 +3,7 @@ package com.nachtraben.soundstage.client.render;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.util.Mth;
+import org.joml.Vector3f;
 
 final class Mesh {
     private Mesh() {}
@@ -240,10 +241,10 @@ final class Mesh {
                 rgb,255, 0,-1,0, light,overlay);
     }
 
-    private static final org.joml.Vector3f QUAD_NORMAL = new org.joml.Vector3f();
+    private static final Vector3f QUAD_NORMAL = new Vector3f();
 
     static void applyNormal(VertexConsumer consumer, PoseStack.Pose pose, float nx, float ny, float nz) {
-        org.joml.Vector3f n = pose.transformNormal(nx, ny, nz, QUAD_NORMAL);
+        Vector3f n = pose.transformNormal(nx, ny, nz, QUAD_NORMAL);
         consumer.setNormal(n.x(), n.y(), n.z());
     }
 
@@ -252,7 +253,7 @@ final class Mesh {
                                  float x2,float y2,float z2, float x3,float y3,float z3,
                                  int rgb, int alpha, float nx, float ny, float nz,
                                  int light, int overlay) {
-        org.joml.Vector3f n = pose.transformNormal(nx, ny, nz, QUAD_NORMAL);
+        Vector3f n = pose.transformNormal(nx, ny, nz, QUAD_NORMAL);
         float tx = n.x(), ty = n.y(), tz = n.z();
         addTintedVertex(consumer, pose, x0,y0,z0, 0,1, rgb,alpha,tx,ty,tz, light,overlay);
         addTintedVertex(consumer, pose, x1,y1,z1, 0,0, rgb,alpha,tx,ty,tz, light,overlay);
@@ -265,7 +266,7 @@ final class Mesh {
                          float x2,float y2,float z2, float x3,float y3,float z3,
                          int rgb, int alpha, float nx, float ny, float nz,
                          int light, int overlayA, int overlayB) {
-        org.joml.Vector3f n = pose.transformNormal(nx, ny, nz, QUAD_NORMAL);
+        Vector3f n = pose.transformNormal(nx, ny, nz, QUAD_NORMAL);
         float tx = n.x(), ty = n.y(), tz = n.z();
         addTintedVertex(consumer, pose, x0,y0,z0, 0,1, rgb,alpha,tx,ty,tz, light,overlayA);
         addTintedVertex(consumer, pose, x1,y1,z1, 0,0, rgb,alpha,tx,ty,tz, light,overlayB);
@@ -274,7 +275,7 @@ final class Mesh {
     }
 
     static int weightOverlay(float weight) {
-        return Math.round(net.minecraft.util.Mth.clamp(weight, 0f, 1f) * 255f);
+        return Math.round(Mth.clamp(weight, 0f, 1f) * 255f);
     }
 
     static void addTintedVertex(VertexConsumer consumer, PoseStack.Pose pose,

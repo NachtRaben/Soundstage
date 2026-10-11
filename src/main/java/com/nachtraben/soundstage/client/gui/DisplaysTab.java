@@ -1,10 +1,5 @@
 package com.nachtraben.soundstage.client.gui;
 
-import dev.armadeus.armalib.ui.UiDraw;
-import dev.armadeus.armalib.ui.UiGraphics;
-import dev.armadeus.armalib.ui.UiIcon;
-import dev.armadeus.armalib.ui.UiSegmented;
-import dev.armadeus.armalib.ui.UiSwitch;
 import com.nachtraben.soundstage.block.ReceiverBlockEntity;
 import com.nachtraben.soundstage.block.ScreenBlock;
 import com.nachtraben.soundstage.block.ScreenBlockEntity;
@@ -15,15 +10,24 @@ import com.nachtraben.soundstage.network.DisplayUnlinkC2SPacket;
 import com.nachtraben.soundstage.network.ScreenFitModeC2SPacket;
 import com.nachtraben.soundstage.network.SpeakerControlC2SPacket;
 import dev.armadeus.armalib.platform.client.ClientNetwork;
+import dev.armadeus.armalib.ui.UiDraw;
+import dev.armadeus.armalib.ui.UiGraphics;
+import dev.armadeus.armalib.ui.UiIcon;
+import dev.armadeus.armalib.ui.UiSegmented;
+import dev.armadeus.armalib.ui.UiSwitch;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 final class DisplaysTab extends ReceiverTab {
 
@@ -109,7 +113,7 @@ final class DisplaysTab extends ReceiverTab {
         var level = Minecraft.getInstance().level;
         if (level == null || !(level.getBlockEntity(screen.pos) instanceof ReceiverBlockEntity receiver)) return;
         Map<BlockPos, Display> byAnchor = new LinkedHashMap<>();
-        java.util.Set<BlockPos> covered = new java.util.HashSet<>();
+        Set<BlockPos> covered = new HashSet<>();
         for (BlockPos member : receiver.getScreens()) {
             if (covered.contains(member)) continue;
             if (!level.isLoaded(member) || !(level.getBlockEntity(member) instanceof ScreenBlockEntity screenBlock)) {
@@ -245,7 +249,8 @@ final class DisplaysTab extends ReceiverTab {
         double cell = (FIT_WIDTH - 2) / 2.0;
         for (int i = 0; i < 2; i++) {
             ScreenBlockEntity.FitMode mode = ScreenBlockEntity.FitMode.values()[i];
-            if (inside(mouseX, mouseY, fitX() + 1 + cell * i, controlTop, cell, CONTROL_HEIGHT) && display.mode() != mode) {
+            if (inside(mouseX, mouseY, fitX() + 1 + cell * i, controlTop, cell, CONTROL_HEIGHT)
+                    && display.mode() != mode) {
                 ClientNetwork.sendToServer(new ScreenFitModeC2SPacket(display.anchor(), mode.ordinal()));
                 displays.set(row, new Display(display.anchor(), display.widthCells(), display.heightCells(),
                         display.facing(), mode));
@@ -257,8 +262,8 @@ final class DisplaysTab extends ReceiverTab {
     }
 
     private static void playClick() {
-        Minecraft.getInstance().getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
-                net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK, 1.0f));
+        Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(
+                SoundEvents.UI_BUTTON_CLICK, 1.0f));
     }
 
     @Override

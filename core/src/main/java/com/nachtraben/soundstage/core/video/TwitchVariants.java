@@ -8,9 +8,7 @@ import java.util.Optional;
 
 public final class TwitchVariants {
 
-    public static final String SOURCE = "chunked";
-
-    static final double PREFERRED_MAX_FRAME_RATE = 30.5;
+    static final double HOUSE_MAX_FRAME_RATE = 30.5;
 
     public record Variant(String name, int width, int height, double frameRate, String codecs, String uri) {
         public boolean hasPicture() {
@@ -18,14 +16,43 @@ public final class TwitchVariants {
         }
 
         public boolean isH264() {
-            for (String codec : codecs.split(",")) {
-                if (codec.strip().toLowerCase(Locale.ROOT).startsWith("avc1")) return true;
-            }
-            return false;
+            return codec("avc1", "avc3") != null;
         }
 
-        public boolean isSource() {
-            return SOURCE.equals(name);
+        public boolean isHevc() {
+            return codec("hvc1", "hev1") != null;
+        }
+
+        public boolean isReadable() {
+            return hasPicture() && (isH264() || isHevc());
+        }
+
+        public int h264Profile() {
+            String codec = codec("avc1", "avc3");
+            if (codec == null || codec.length() < 7 || codec.charAt(4) != '.') return -1;
+            try {
+                return Integer.parseInt(codec.substring(5, 7), 16);
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+
+        public boolean looksHouse() {
+            return h264Profile() == HouseFormat.MAIN_PROFILE && atMostThirty();
+        }
+
+        boolean atMostThirty() {
+            return frameRate > 0 && frameRate <= HOUSE_MAX_FRAME_RATE;
+        }
+
+        private String codec(String... names) {
+            for (String codec : codecs.split(",")) {
+                String trimmed = codec.strip().toLowerCase(Locale.ROOT);
+                for (String name : names) {
+                    if (trimmed.startsWith(name)) return trimmed;
+                }
+            }
+            return null;
         }
     }
 
@@ -47,13 +74,24 @@ public final class TwitchVariants {
         return variants;
     }
 
-    public static Optional<Variant> choose(List<Variant> variants, int maxHeight) {
-        return variants.stream()
-                .filter(v -> v.hasPicture() && v.isH264() && v.height() <= maxHeight)
-                .max(Comparator.<Variant>comparingInt(v -> v.frameRate() <= PREFERRED_MAX_FRAME_RATE ? 1 : 0)
-                        .thenComparingInt(Variant::height)
-                        .thenComparingDouble(v -> -v.frameRate())
-                        .thenComparingInt(v -> v.isSource() ? 0 : 1));
+    public static Optional<Variant> choose(List<Variant> variants, int maxHeight, boolean reencodable) {
+        if (!reencodable) {
+            return variants.stream()
+                    .filter(v -> v.isReadable() && v.looksHouse() && v.height() <= maxHeight)
+                    .max(Comparator.<Variant>comparingInt(Variant::height).thenComparingDouble(v -> -v.frameRate()));
+        }
+        List<Variant> readable = variants.stream().filter(Variant::isReadable).toList();
+        if (readable.isEmpty()) return Optional.empty();
+        List<Variant> fitting = readable.stream().filter(v -> v.height() <= maxHeight).toList();
+        int height = fitting.isEmpty()
+                ? readable.stream().mapToInt(Variant::height).min().orElseThrow()
+                : fitting.stream().mapToInt(Variant::height).max().orElseThrow();
+        return readable.stream()
+                .filter(v -> v.height() == height)
+                .max(Comparator.<Variant>comparingInt(v -> v.looksHouse() ? 1 : 0)
+                        .thenComparingInt(v -> v.atMostThirty() ? 1 : 0)
+                        .thenComparingInt(v -> v.isH264() ? 1 : 0)
+                        .thenComparingDouble(v -> -v.frameRate()));
     }
 
     private static Variant variant(String attributes, String uri) {

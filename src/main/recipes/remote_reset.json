@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "soundstage:remote"
+  ],
+  "result": {
+    "count": 1,
+    "id": "soundstage:remote"
+  }
+}

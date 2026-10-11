@@ -12,12 +12,12 @@ import org.jetbrains.annotations.NotNull;
 
 @Getter
 @RequiredArgsConstructor
-public class OAuthRequestS2CPacket implements CustomPacketPayload
-{
+public class OAuthRequestS2CPacket implements CustomPacketPayload {
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("soundstage", "oauth_request");
 
     public static final CustomPacketPayload.Type<OAuthRequestS2CPacket> TYPE = new CustomPacketPayload.Type<>(ID);
-    public static final StreamCodec<RegistryFriendlyByteBuf, OAuthRequestS2CPacket> STREAM_CODEC = CustomPacketPayload.codec(
+    public static final StreamCodec<RegistryFriendlyByteBuf, OAuthRequestS2CPacket> STREAM_CODEC =
+            CustomPacketPayload.codec(
         OAuthRequestS2CPacket::toBytes,
         OAuthRequestS2CPacket::new
     );

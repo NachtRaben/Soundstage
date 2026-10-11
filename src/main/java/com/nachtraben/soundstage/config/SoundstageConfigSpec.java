@@ -1,6 +1,5 @@
 package com.nachtraben.soundstage.config;
 
-import com.nachtraben.soundstage.core.UrlPolicy;
 import dev.armadeus.armalib.config.Configs;
 import dev.armadeus.armalib.core.config.BooleanSetting;
 import dev.armadeus.armalib.core.config.ConfigSpec;
@@ -9,6 +8,8 @@ import dev.armadeus.armalib.core.config.Scope;
 import dev.armadeus.armalib.core.config.StringListSetting;
 import dev.armadeus.armalib.core.config.StringSetting;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
 
 public final class SoundstageConfigSpec implements SoundstageSettings {
@@ -47,6 +48,8 @@ public final class SoundstageConfigSpec implements SoundstageSettings {
         final StringSetting ffmpegPath;
         final BooleanSetting downloadFfmpeg;
         final IntSetting maxVideoHeight;
+        final IntSetting maxPicturesEncoding;
+        final IntSetting imageDisplaySeconds;
 
         final StringListSetting urlAllowPatterns;
         final StringListSetting urlDenyPatterns;
@@ -66,9 +69,8 @@ public final class SoundstageConfigSpec implements SoundstageSettings {
             allowYoutubeSearch = b.define("allowYoutubeSearch", D.allowYoutubeSearch(), "Allow YouTube Search");
             youtubeClients = b.defineList("youtubeClients", D.youtubeClients(),
                     "Which YouTube clients to try, in order, by youtube-source class name.",
-                    "Exists as config because it expires: YouTube periodically breaks one client or",
-                    "another, and the fix is a different order rather than a code change. An unknown",
-                    "name is skipped with a warning, so a typo cannot take YouTube down entirely.",
+                    "YouTube periodically breaks one client or another, and a different order is the",
+                    "usual fix. An unknown name is skipped with a warning.",
                     "The Tv client is appended automatically when an OAuth token is configured.");
             b.pop();
 
@@ -102,23 +104,31 @@ public final class SoundstageConfigSpec implements SoundstageSettings {
 
             b.push("video", "How the server makes video for screens.");
             enableVideo = b.define("enableVideo", D.enableVideo(),
-                    "Make video for screens at all. On by default. Off, screens stay black, a media",
-                    "file with a picture plays its sound only, and YouTube plays the same sound-only",
-                    "way it always does without a linked screen. Sound is never affected.");
+                    "Whether screens show video. On by default. Off, a display shows what is playing",
+                    "instead of a picture; the sound is the same either way.");
             ffmpegPath = b.define("ffmpegPath", D.ffmpegPath(),
                     "The ffmpeg program: a name on the PATH, or a full path. ffprobe is looked for beside it,",
                     "then on the PATH. Optional: without it, media files play with sound only.");
             downloadFfmpeg = b.define("downloadFfmpeg", D.downloadFfmpeg(),
                     "Let Soundstage download ffmpeg when this server has none: a GPL build from",
-                    "github.com/BtbN/FFmpeg-Builds (about 60 MB for Linux, 76 MB for Windows, 180 MB",
-                    "unpacked), checked against the SHA-256 this version of Soundstage carries, test-run,",
-                    "and kept in the soundstage-ffmpeg folder in the server's directory. It is only used",
-                    "while ffmpegPath is \"ffmpeg\" and no ffmpeg runs from the PATH. Linux (x64, arm64,",
-                    "glibc) and Windows (x64, arm64); not macOS. OFF by default: turning it on means this",
-                    "server downloads and runs a program from the internet.");
+                    "github.com/BtbN/FFmpeg-Builds (tens of megabytes), checked against the SHA-256",
+                    "this version of Soundstage carries, test-run, and kept in the soundstage-ffmpeg",
+                    "folder in the server's directory. It is only used while ffmpegPath is \"ffmpeg\"",
+                    "and no ffmpeg runs from the PATH. Linux (x64, arm64, glibc) and Windows (x64,",
+                    "arm64); not macOS. OFF by default: turning it on means this server downloads and",
+                    "runs a program from the internet.");
             maxVideoHeight = b.defineInRange("maxVideoHeight", D.maxVideoHeight(), 144, 1080,
-                    "Tallest picture sent to screens, in lines. Every client decodes it on its own",
-                    "processor, so taller costs every viewer more.");
+                    "Largest picture sent to screens, as the height of a 16:9 picture; a wider or",
+                    "narrower one may have as many pixels. Every client decodes it on its own processor,",
+                    "so larger costs every viewer more.");
+            maxPicturesEncoding = b.defineInRange("maxPicturesEncoding", D.maxPicturesEncoding(), 0, 1024,
+                    "Most receivers showing video at once. 0, the default, lets the server start another",
+                    "whenever it has room. A receiver waiting its turn plays the sound, and its displays",
+                    "show what is playing until its picture can start.");
+            imageDisplaySeconds = b.defineInRange("imageDisplaySeconds", D.imageDisplaySeconds(), 1, 86400,
+                    "How long a PNG or JPEG shows on displays before the receiver moves on, when",
+                    "something is queued after it; a queue of images on loop is a slideshow. An image",
+                    "alone in the queue stays until it is skipped, stopped or replaced.");
             b.pop();
 
             b.push("filters",
@@ -164,6 +174,8 @@ public final class SoundstageConfigSpec implements SoundstageSettings {
     @Override public String ffmpegPath() { return VALUES.ffmpegPath.get(); }
     @Override public boolean downloadFfmpeg() { return VALUES.downloadFfmpeg.get(); }
     @Override public int maxVideoHeight() { return VALUES.maxVideoHeight.get(); }
+    @Override public int maxPicturesEncoding() { return VALUES.maxPicturesEncoding.get(); }
+    @Override public int imageDisplaySeconds() { return VALUES.imageDisplaySeconds.get(); }
 
     @Override public int maxPlaylistTracks() { return VALUES.maxPlaylistTracks.get(); }
     @Override public int maxQueueSize() { return VALUES.maxQueueSize.get(); }
@@ -176,11 +188,10 @@ public final class SoundstageConfigSpec implements SoundstageSettings {
     }
 
     private static void save() {
-        if (com.nachtraben.soundstage.RigStaging.fault("settings-unsaved")) return;
         try {
             Configs.save(SPEC);
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException("soundstage.aon could not be saved", e);
+        } catch (IOException e) {
+            throw new UncheckedIOException("soundstage.aon could not be saved", e);
         }
     }
 
@@ -197,22 +208,5 @@ public final class SoundstageConfigSpec implements SoundstageSettings {
     @Override
     public List<String> urlDenyPatterns() {
         return VALUES.urlDenyPatterns.get();
-    }
-
-    static IntSetting maxPlayingReceiversSetting() {
-        return VALUES.maxPlayingReceivers;
-    }
-
-    static BooleanSetting enableHttpSetting() {
-        return VALUES.enableHttp;
-    }
-
-    public static void enableHttpForRigSession() {
-        if (!com.nachtraben.soundstage.RigStaging.ACTIVE) throw new IllegalStateException("rig sessions only");
-        VALUES.enableHttp.set(true);
-    }
-
-    static BooleanSetting allowPrivateNetworkHostsSetting() {
-        return VALUES.allowPrivateNetworkHosts;
     }
 }

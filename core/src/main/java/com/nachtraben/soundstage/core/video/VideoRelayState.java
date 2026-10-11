@@ -8,8 +8,10 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.LongSupplier;
 
 public final class VideoRelayState<V> {
@@ -39,6 +41,7 @@ public final class VideoRelayState<V> {
 
     private final int maxUnitBytes;
     private final BooleanSupplier paused;
+    private final Function<? super V, UUID> idOf;
 
     private Object attached;
     private LongSupplier position;
@@ -48,10 +51,25 @@ public final class VideoRelayState<V> {
     private long tooLarge;
     private int firstTooLargeBytes;
     private long shed;
+    private final PictureWatchers watchers = new PictureWatchers();
 
-    public VideoRelayState(int maxUnitBytes, BooleanSupplier paused) {
+    public VideoRelayState(int maxUnitBytes, BooleanSupplier paused, Function<? super V, UUID> idOf) {
         this.maxUnitBytes = maxUnitBytes;
         this.paused = paused;
+        this.idOf = idOf;
+    }
+
+    public synchronized boolean watch(UUID player, boolean watching) {
+        if (closed) return false;
+        return watchers.request(player, watching);
+    }
+
+    public synchronized void forgetWatcher(UUID player) {
+        watchers.forget(player);
+    }
+
+    public synchronized boolean watching(UUID player) {
+        return watchers.watching(player);
     }
 
     public synchronized void attach(Object track, LongSupplier position) {
@@ -79,6 +97,7 @@ public final class VideoRelayState<V> {
         if (closed || track != attached || run == null) return;
         run.voided = true;
         clearQueue(run);
+        watchers.dropPictures();
     }
 
     public synchronized void abandon(Object track) {
@@ -96,6 +115,7 @@ public final class VideoRelayState<V> {
     public synchronized void begin(Object track, int trackGeneration, long startMillis) {
         if (closed || track != attached) return;
         run = new Run(trackGeneration, startMillis, paused.getAsBoolean());
+        watchers.dropPictures();
     }
 
     public synchronized Accepted accept(Object track, int trackGeneration, long ptsMillis, boolean keyframe,
@@ -153,7 +173,9 @@ public final class VideoRelayState<V> {
         }
         if (current.voided) return;
 
+        startWatchers(current, nowNanos, out);
         sendDuePictures(current, out);
+        watchers.keepFrom(current.position);
 
         boolean isPaused = paused.getAsBoolean();
         if (isPaused != current.wasPaused) {
@@ -172,6 +194,7 @@ public final class VideoRelayState<V> {
         if (current.finished && current.queue.isEmpty() && current.position >= current.lastSentMillis) {
             stop(current, out);
             run = null;
+            watchers.dropPictures();
         }
     }
 
@@ -183,6 +206,7 @@ public final class VideoRelayState<V> {
         closed = true;
         attached = null;
         position = null;
+        watchers.clear();
     }
 
     public synchronized long tooLargeUnits() {
@@ -197,6 +221,34 @@ public final class VideoRelayState<V> {
         return shed;
     }
 
+    private void startWatchers(Run current, long nowNanos, List<Send<V>> out) {
+        List<V> starting = null;
+        for (Map.Entry<V, Viewer> entry : current.viewers.entrySet()) {
+            Viewer viewer = entry.getValue();
+            boolean watching = watchers.watching(idOf.apply(entry.getKey()));
+            if (watching == viewer.watching) continue;
+            viewer.watching = watching;
+            viewer.awaitingKeyframe = true;
+            if (watching) {
+                if (starting == null) starting = new ArrayList<>();
+                starting.add(entry.getKey());
+            }
+        }
+        if (starting == null) return;
+        List<PictureWatchers.Picture> kept = watchers.pictures();
+        if (kept.isEmpty()) return;
+        List<V> to = new ArrayList<>(starting.size());
+        for (V viewer : starting) {
+            if (watchers.mayReplay(idOf.apply(viewer), nowNanos)) to.add(viewer);
+        }
+        if (to.isEmpty()) return;
+        for (PictureWatchers.Picture picture : kept) {
+            out.add(new Send<>(Kind.FRAME, current.generation, picture.ptsMillis(), picture.keyframe(), picture.data(),
+                    to));
+        }
+        for (V viewer : to) current.viewers.get(viewer).awaitingKeyframe = false;
+    }
+
     private void sendDuePictures(Run current, List<Send<V>> out) {
         long due = current.position + LOOKAHEAD_MILLIS;
         Unit unit;
@@ -204,9 +256,11 @@ public final class VideoRelayState<V> {
             current.queue.pollFirst();
             current.queuedBytes -= unit.data().length;
             current.lastSentMillis = Math.max(current.lastSentMillis, unit.ptsMillis());
+            watchers.sent(unit.ptsMillis(), unit.keyframe(), unit.afterGap(), unit.data());
             List<V> to = new ArrayList<>(current.viewers.size());
             for (Map.Entry<V, Viewer> entry : current.viewers.entrySet()) {
                 Viewer viewer = entry.getValue();
+                if (!viewer.watching) continue;
                 if (unit.keyframe()) {
                     viewer.awaitingKeyframe = false;
                 } else if (unit.afterGap()) {
@@ -239,6 +293,7 @@ public final class VideoRelayState<V> {
             stop(run, pendingStops);
             run = null;
         }
+        watchers.dropPictures();
     }
 
     private void stop(Run current, List<Send<V>> out) {
@@ -254,6 +309,7 @@ public final class VideoRelayState<V> {
     private record Unit(long ptsMillis, boolean keyframe, byte[] data, boolean afterGap) {}
 
     private static final class Viewer {
+        boolean watching;
         boolean awaitingKeyframe = true;
     }
 

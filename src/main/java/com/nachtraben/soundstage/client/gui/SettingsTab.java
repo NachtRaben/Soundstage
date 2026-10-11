@@ -1,12 +1,13 @@
 package com.nachtraben.soundstage.client.gui;
 
+import com.nachtraben.soundstage.block.IAudioReceiver;
+import com.nachtraben.soundstage.client.audio.LiveInputClient;
+import com.nachtraben.soundstage.network.SpeakerControlC2SPacket;
 import dev.armadeus.armalib.ui.UiButton;
 import dev.armadeus.armalib.ui.UiDraw;
 import dev.armadeus.armalib.ui.UiGraphics;
 import dev.armadeus.armalib.ui.UiIcon;
 import dev.armadeus.armalib.ui.UiSwitch;
-import com.nachtraben.soundstage.block.IAudioReceiver;
-import com.nachtraben.soundstage.network.SpeakerControlC2SPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
@@ -49,16 +50,17 @@ final class SettingsTab extends ReceiverTab {
             screen.sendControl(SpeakerControlC2SPacket.Action.TOGGLE_LOCK, "", 0);
         }).enabled(this::mayToggleLock));
         Component open = shareLabel();
-        int openWidth = Math.max(UiButton.widthFor(Component.translatable("gui.soundstage.receiver.share_open"), true, 10, 8),
+        int openWidth = Math.max(
+                UiButton.widthFor(Component.translatable("gui.soundstage.receiver.share_open"), true, 10, 8),
                 UiButton.widthFor(Component.translatable("gui.soundstage.player.sharing"), true, 10, 8));
         screen.addTabWidget(new UiButton(THEME, right - openWidth, rowTop(2) + 10, openWidth, 17, UiButton.Look.PILL,
                 () -> Minecraft.getInstance().setScreen(new LiveInputScreen(screen.pos, screen)))
                 .icon(UiIcon.SHARE).iconSize(10).label(this::shareLabel)
-                .selected(() -> com.nachtraben.soundstage.client.audio.LiveInputClient.isSharingTo(screen.pos)));
+                .selected(() -> LiveInputClient.isSharingTo(screen.pos)));
     }
 
     private Component shareLabel() {
-        return Component.translatable(com.nachtraben.soundstage.client.audio.LiveInputClient.isSharingTo(screen.pos)
+        return Component.translatable(LiveInputClient.isSharingTo(screen.pos)
                 ? "gui.soundstage.player.sharing" : "gui.soundstage.receiver.share_open");
     }
 
@@ -67,7 +69,8 @@ final class SettingsTab extends ReceiverTab {
         IAudioReceiver receiver = screen.receiverBlock();
         var player = Minecraft.getInstance().player;
         boolean owner = receiver != null && player != null && player.getUUID().equals(receiver.getOwnerUUID());
-        row(g, 0, "gui.soundstage.receiver.levelling", Component.translatable("gui.soundstage.receiver.levelling_hint"));
+        row(g, 0, "gui.soundstage.receiver.levelling",
+                Component.translatable("gui.soundstage.receiver.levelling_hint"));
         row(g, 1, "gui.soundstage.receiver.lock", Component.translatable(!mayToggleLock()
                 ? "gui.soundstage.receiver.lock_hint_other"
                 : owner ? "gui.soundstage.receiver.lock_hint_owner" : "gui.soundstage.receiver.lock_hint_operator"));

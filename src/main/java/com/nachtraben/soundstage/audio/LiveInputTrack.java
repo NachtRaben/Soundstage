@@ -10,10 +10,12 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import com.sedmelluq.discord.lavaplayer.track.BaseAudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrameBuffer;
 import com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class LiveInputTrack extends BaseAudioTrack {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     private static final int MAX_FRAMES_AHEAD = 3;
 
@@ -45,8 +47,7 @@ public final class LiveInputTrack extends BaseAudioTrack {
             executor.executeProcessingLoop(() -> {
                 AudioFrameBuffer ahead = executor.getAudioBuffer();
                 while (!session.isEnded()) {
-                    if (buffer.idle(System.nanoTime())
-                            && !com.nachtraben.soundstage.RigStaging.fault("quiet-share-kept")) {
+                    if (buffer.idle(System.nanoTime())) {
                         session.end(LiveInputSession.End.WENT_QUIET);
                         break;
                     }

@@ -3,19 +3,28 @@ package com.nachtraben.soundstage.audio.media;
 import com.nachtraben.soundstage.config.SoundstageConfig;
 import com.nachtraben.soundstage.core.video.MediaNames;
 import com.nachtraben.soundstage.core.video.MediaProbe;
+import com.nachtraben.soundstage.core.video.PictureSize;
+import com.nachtraben.soundstage.core.video.StillImage;
+import com.nachtraben.soundstage.core.video.StillImageProbe;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.source.local.LocalAudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
+import com.sedmelluq.discord.lavaplayer.tools.Units;
 import com.sedmelluq.discord.lavaplayer.track.AudioItem;
 import com.sedmelluq.discord.lavaplayer.track.AudioReference;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import com.sedmelluq.discord.lavaplayer.track.InternalAudioTrack;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.BufferedInputStream;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -25,16 +34,19 @@ public final class MediaFolderSourceManager implements AudioSourceManager {
 
     public static final String PREFIX = "media:";
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     private static final String SOURCE_NAME = "soundstage-media";
     private static final int ENCODING_VERSION = 1;
     private static final String AUTHOR = "Media folder";
-    private static final String SOUND_ONLY_REFUSED = "Without ffmpeg on the server, that media file cannot be played.";
+    private static final String SOUND_ONLY_REFUSED = "This server can't play that media file.";
+
+    static final String IMAGES_NEED_FFMPEG = "This server can't show images.";
 
     @FunctionalInterface
     interface Transcoder {
-        Ffmpeg.Transcode start(Path file, String name, long startMillis, int maxHeight, MediaProbe probe,
+        Ffmpeg.Transcode start(Path file, String name, long startMillis,
+                               PictureSize.Copy picture, MediaProbe probe,
                                boolean toneMap) throws IOException;
     }
 
@@ -79,9 +91,29 @@ public final class MediaFolderSourceManager implements AudioSourceManager {
         return prober.probe(file, name);
     }
 
-    Ffmpeg.Transcode transcode(Path file, String name, long startMillis, int maxHeight, MediaProbe probe,
+    StillImage.Header readStill(Path file) throws IOException {
+        try (InputStream in = new BufferedInputStream(Files.newInputStream(file))) {
+            return StillImage.read(in);
+        }
+    }
+
+    boolean ffmpegAvailable() throws InterruptedException {
+        return Ffmpeg.available();
+    }
+
+    Ffmpeg.Transcode still(Path file, String name, StillImage.Type type,
+                           PictureSize.Copy picture) throws IOException {
+        return Ffmpeg.still(file, name, type, picture);
+    }
+
+    Ffmpeg.Transcode silence(String name, long startMillis, long durationMillis) throws IOException {
+        return Ffmpeg.silence(name, startMillis, durationMillis);
+    }
+
+    Ffmpeg.Transcode transcode(Path file, String name, long startMillis,
+                               PictureSize.Copy picture, MediaProbe probe,
                                boolean toneMap) throws IOException {
-        return transcoder.start(file, name, startMillis, maxHeight, probe, toneMap);
+        return transcoder.start(file, name, startMillis, picture, probe, toneMap);
     }
 
     @Override
@@ -105,6 +137,22 @@ public final class MediaFolderSourceManager implements AudioSourceManager {
         }
         Path file = MediaFolder.resolve(name).orElseThrow(() ->
                 new FriendlyException("There is no file by that name in the media folder.", COMMON, null));
+        if (StillImage.isImageName(name)) {
+            StillImage.Header header;
+            try {
+                header = readStill(file);
+            } catch (IOException e) {
+                throw new FriendlyException("That image could not be read.", COMMON, e);
+            }
+            if (header == null) {
+                throw new FriendlyException("That file is not a PNG or JPEG image.", COMMON, null);
+            }
+            if (!header.fits()) {
+                throw new FriendlyException(StillImageProbe.TOO_LARGE, COMMON, null);
+            }
+            requireFfmpegForImages();
+            return new FfmpegMediaTrack(stillInfo(name), name, this);
+        }
 
         MediaProbe probe;
         try {
@@ -114,13 +162,23 @@ public final class MediaFolderSourceManager implements AudioSourceManager {
             throw new FriendlyException("Loading that media file was interrupted.", COMMON, e);
         }
         if (probe != null) {
-            if (!probe.hasAudio()) {
-                throw new FriendlyException("That media file has no sound to play.", COMMON, null);
+            if (!probe.hasAudio() && !probe.hasVideo()) {
+                throw new FriendlyException("That media file has no sound or picture to play.", COMMON, null);
             }
             return new FfmpegMediaTrack(info(name, probe.durationMillis()), name, this);
         }
         AudioTrack readable = readSoundOnly(file, name);
         return new FfmpegMediaTrack(info(name, readable.getDuration()), name, this);
+    }
+
+    private void requireFfmpegForImages() {
+        try {
+            if (ffmpegAvailable()) return;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new FriendlyException("Loading that image was interrupted.", COMMON, e);
+        }
+        throw new FriendlyException(IMAGES_NEED_FFMPEG, COMMON, null);
     }
 
     InternalAudioTrack readSoundOnly(Path file, String name) {
@@ -134,7 +192,16 @@ public final class MediaFolderSourceManager implements AudioSourceManager {
         if (item instanceof InternalAudioTrack track) {
             return track;
         }
+        LOGGER.warn("Soundstage: without ffmpeg, LavaPlayer cannot read media file {}.", name);
         throw new FriendlyException(SOUND_ONLY_REFUSED, COMMON, null);
+    }
+
+    private static AudioTrackInfo stillInfo(String name) {
+        String identifier = PREFIX + name;
+        int dot = name.lastIndexOf('.');
+        String title = dot > 0 ? name.substring(0, dot) : name;
+        return new AudioTrackInfo(title, StillImageProbe.AUTHOR, Units.DURATION_MS_UNKNOWN, identifier, true,
+                identifier, null, null);
     }
 
     private static AudioTrackInfo info(String name, long lengthMillis) {

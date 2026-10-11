@@ -2,6 +2,7 @@ package com.nachtraben.soundstage.util;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
 
 public final class Players {
     private Players() {
@@ -23,7 +24,7 @@ public final class Players {
         *///?}
     }
 
-    public static String name(net.minecraft.world.entity.player.Player player) {
+    public static String name(Player player) {
         //? if >=1.21.11 {
         /*return player.getGameProfile().name();
         *///?} else {
@@ -31,15 +32,7 @@ public final class Players {
         //?}
     }
 
-    public static void selectHotbarSlot(net.minecraft.world.entity.player.Inventory inventory, int slot) {
-        //? if >=1.21.11 {
-        /*inventory.setSelectedSlot(slot);
-        *///?} else {
-        inventory.selected = slot;
-        //?}
-    }
-
-    public static void teleportTo(net.minecraft.server.level.ServerPlayer player, net.minecraft.server.level.ServerLevel level,
+    public static void teleportTo(ServerPlayer player, ServerLevel level,
                                   double x, double y, double z, float yaw, float pitch) {
         //? if >=1.21.11 {
         /*player.teleportTo(level, x, y, z, java.util.Set.of(), yaw, pitch, true);

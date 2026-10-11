@@ -4,6 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 public final class IrisCompat {
 
@@ -32,7 +34,7 @@ public final class IrisCompat {
         }
     }
 
-    private static final java.util.List<Object[]> COPIES = new java.util.ArrayList<>();
+    private static final List<Object[]> COPIES = new ArrayList<>();
     private static boolean copiesApplied;
 
     public static synchronized void drawLike(Object vanilla, Object ours) {
@@ -49,13 +51,16 @@ public final class IrisCompat {
                 if (method.getName().equals("copyPipeline") && method.getParameterCount() == 2) copy = method;
             }
             if (copy == null) {
-                LOGGER.warn("Iris has no IrisPipelines.copyPipeline; Soundstage's own pipelines draw with vanilla's programs under a pack");
+                LOGGER.warn("Iris has no IrisPipelines.copyPipeline; Soundstage's own pipelines draw with vanilla's "
+                        + "programs under a pack");
                 return;
             }
             for (Object[] pair : COPIES) copy.invoke(null, pair[0], pair[1]);
-            LOGGER.info("Soundstage: Iris draws {} of Soundstage's pipelines as the vanilla pipelines they copy", COPIES.size());
+            LOGGER.info("Soundstage: Iris draws {} of Soundstage's pipelines as the vanilla pipelines they copy",
+                    COPIES.size());
         } catch (Throwable t) {
-            LOGGER.warn("Iris pipeline mapping failed; Soundstage's own pipelines draw with vanilla's programs under a pack", t);
+            LOGGER.warn("Iris pipeline mapping failed; Soundstage's own pipelines draw with vanilla's programs under "
+                    + "a pack", t);
         }
     }
 
@@ -63,18 +68,10 @@ public final class IrisCompat {
 
     private static volatile boolean shadowQueryFailed = false;
 
-    private static long shadowQueries;
-
-    public static long shadowPassQueries() {
-        return shadowQueries;
-    }
-
     static boolean isRenderingShadows() {
         if (SHADOWS_ACTIVE == null || API == null || shadowQueryFailed) return false;
         try {
-            boolean active = (Boolean) SHADOWS_ACTIVE.invoke(API);
-            if (active) shadowQueries++;
-            return active;
+            return (Boolean) SHADOWS_ACTIVE.invoke(API);
         } catch (Throwable t) {
             shadowQueryFailed = true;
             LOGGER.warn("Iris shadow-pass query failed; assuming no shadow pass for the rest of the session", t);
@@ -93,7 +90,9 @@ public final class IrisCompat {
             return previous;
         } catch (Throwable t) {
             phaseFailed = true;
-            LOGGER.warn("Iris phase override failed; cached geometry will shade as an entity for the rest of the session", t);
+            LOGGER.warn(
+                    "Iris phase override failed; cached geometry will shade as an entity for the rest of the session",
+                    t);
             return null;
         }
     }

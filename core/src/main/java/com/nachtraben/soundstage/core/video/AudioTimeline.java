@@ -1,5 +1,7 @@
 package com.nachtraben.soundstage.core.video;
 
+import com.nachtraben.soundstage.core.OpusCodec;
+
 import java.util.ArrayDeque;
 import java.util.Iterator;
 
@@ -7,8 +9,8 @@ public final class AudioTimeline {
 
     public static final double FRAME_MILLIS = 20.0;
 
-    public static final double CODEC_DELAY_MILLIS = com.nachtraben.soundstage.core.OpusCodec.LOOKAHEAD_SAMPLES
-            * 1000.0 / com.nachtraben.soundstage.core.OpusCodec.SAMPLE_RATE;
+    public static final double CODEC_DELAY_MILLIS = OpusCodec.LOOKAHEAD_SAMPLES
+            * 1000.0 / OpusCodec.SAMPLE_RATE;
 
     static final long BREAK_TOLERANCE_MILLIS = 30;
 

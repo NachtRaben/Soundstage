@@ -1,7 +1,16 @@
 package com.nachtraben.soundstage.client.gui;
 
+import com.nachtraben.soundstage.block.IAudioReceiver;
+import com.nachtraben.soundstage.block.PartyBoxBlockEntity;
+import com.nachtraben.soundstage.block.ReceiverBlockEntity;
+import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
+import com.nachtraben.soundstage.core.TrackTime;
+import com.nachtraben.soundstage.core.video.AudioChoice;
+import com.nachtraben.soundstage.network.QueueOpC2SPacket;
+import com.nachtraben.soundstage.network.SpeakerControlC2SPacket;
+import com.nachtraben.soundstage.network.SpeakerMetadataS2CPacket;
 import dev.armadeus.armalib.core.ui.Theme;
-import dev.armadeus.armalib.ui.ArtworkCache;
+import dev.armadeus.armalib.platform.client.ClientNetwork;
 import dev.armadeus.armalib.ui.ScrollingText;
 import dev.armadeus.armalib.ui.UiButton;
 import dev.armadeus.armalib.ui.UiDraw;
@@ -9,22 +18,12 @@ import dev.armadeus.armalib.ui.UiDropdown;
 import dev.armadeus.armalib.ui.UiGraphics;
 import dev.armadeus.armalib.ui.UiIcon;
 import dev.armadeus.armalib.ui.UiScreen;
-import dev.armadeus.armalib.ui.UiSegmented;
-import dev.armadeus.armalib.ui.UiSlider;
-import dev.armadeus.armalib.ui.UiSwitch;
-import com.nachtraben.soundstage.RigStaging;
-import com.nachtraben.soundstage.block.IAudioReceiver;
-import com.nachtraben.soundstage.block.ReceiverBlockEntity;
-import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
-import com.nachtraben.soundstage.network.QueueOpC2SPacket;
-import com.nachtraben.soundstage.network.SpeakerControlC2SPacket;
-import com.nachtraben.soundstage.network.SpeakerMetadataS2CPacket;
-import dev.armadeus.armalib.platform.client.ClientNetwork;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -83,6 +82,7 @@ public class AudioPlayerScreen extends Screen {
     long lastSyncTime = 0;
     String currentThumbnailUrl = "";
     boolean synced = false;
+    AudioChoice.Offer audioOffer;
 
     String draftSource = "";
 
@@ -98,10 +98,10 @@ public class AudioPlayerScreen extends Screen {
     }
 
     public AudioPlayerScreen(SpeakerBlockEntity sbe) {
-        super(Component.translatable(sbe instanceof com.nachtraben.soundstage.block.PartyBoxBlockEntity
+        super(Component.translatable(sbe instanceof PartyBoxBlockEntity
                 ? "block.soundstage.party_box" : "block.soundstage.receiver"));
         BlockPos receiverPos = sbe.getReceiverPos();
-        this.partyBox = sbe instanceof com.nachtraben.soundstage.block.PartyBoxBlockEntity;
+        this.partyBox = sbe instanceof PartyBoxBlockEntity;
         this.pos = (partyBox || receiverPos == null) ? sbe.getBlockPos() : receiverPos;
     }
 
@@ -112,7 +112,8 @@ public class AudioPlayerScreen extends Screen {
 
     IAudioReceiver receiverBlock() {
         return Minecraft.getInstance().level != null
-                && Minecraft.getInstance().level.getBlockEntity(pos) instanceof IAudioReceiver receiver ? receiver : null;
+                && Minecraft.getInstance().level.getBlockEntity(pos) instanceof IAudioReceiver receiver
+                        ? receiver : null;
     }
 
     List<Tab> availableTabs() {
@@ -176,7 +177,8 @@ public class AudioPlayerScreen extends Screen {
             addRenderableWidget(new UiButton(THEME, x + 6, footerY + 3, 17, 17, UiButton.Look.ICON,
                     () -> sendControl(SpeakerControlC2SPacket.Action.PLAY_PAUSE, "", 0))
                     .icon(() -> playing ? UiIcon.PAUSE : UiIcon.PLAY).iconSize(11)
-                    .tooltip(() -> Component.translatable(playing ? "gui.soundstage.player.pause" : "gui.soundstage.player.play")));
+                    .tooltip(() -> Component.translatable(playing ? "gui.soundstage.player.pause"
+                            : "gui.soundstage.player.play")));
             addRenderableWidget(new UiButton(THEME, x + 24, footerY + 3, 17, 17, UiButton.Look.ICON,
                     () -> sendControl(SpeakerControlC2SPacket.Action.SKIP, "", 0))
                     .icon(UiIcon.NEXT).iconSize(11).tooltip(Component.translatable("gui.soundstage.player.skip")));
@@ -220,7 +222,8 @@ public class AudioPlayerScreen extends Screen {
     }
 
     void sendSeek(long millis) {
-        ClientNetwork.sendToServer(new SpeakerControlC2SPacket(pos, SpeakerControlC2SPacket.Action.SEEK, "", 0, millis));
+        ClientNetwork.sendToServer(
+                new SpeakerControlC2SPacket(pos, SpeakerControlC2SPacket.Action.SEEK, "", 0, millis));
         currentPosition = millis;
         lastSyncTime = System.currentTimeMillis();
     }
@@ -238,17 +241,25 @@ public class AudioPlayerScreen extends Screen {
         return !trackTitle.isBlank();
     }
 
+    public AudioChoice.Offer audioOffer() {
+        return audioOffer;
+    }
+
+    boolean offersAudioChoice() {
+        return audioOffer != null && audioOffer.shown();
+    }
+
     boolean isLive() {
         return trackDuration <= 0 && hasTrack();
     }
 
     Component timeText() {
         if (trackDuration > 0) {
-            return Component.literal(com.nachtraben.soundstage.core.TrackTime.format(position(), trackDuration) + " / "
-                    + com.nachtraben.soundstage.core.TrackTime.format(trackDuration, trackDuration));
+            return Component.literal(TrackTime.format(position(), trackDuration) + " / "
+                    + TrackTime.format(trackDuration, trackDuration));
         }
         if (hasTrack()) {
-            return Component.translatable("gui.soundstage.player.live", com.nachtraben.soundstage.core.TrackTime.format(position()));
+            return Component.translatable("gui.soundstage.player.live", TrackTime.format(position()));
         }
         return Component.empty();
     }
@@ -275,6 +286,7 @@ public class AudioPlayerScreen extends Screen {
         this.synced = true;
         String newThumb = packet.getThumbnailUrl();
         if (newThumb != null) this.currentThumbnailUrl = newThumb;
+        this.audioOffer = packet.getAudio();
 
         if (tab != null) content().metadataChanged(folderChanged);
     }
@@ -289,7 +301,8 @@ public class AudioPlayerScreen extends Screen {
     @Override
     //?}
     //? if >=26.1 {
-    /*public void extractBackground(net.minecraft.client.gui.GuiGraphicsExtractor raw, int mouseX, int mouseY, float partialTick) {
+    /*public void extractBackground(net.minecraft.client.gui.GuiGraphicsExtractor raw, int mouseX, int mouseY,
+            float partialTick) {
     *///?} else {
     public void renderBackground(net.minecraft.client.gui.GuiGraphics raw, int mouseX, int mouseY, float partialTick) {
     //?}
@@ -311,7 +324,8 @@ public class AudioPlayerScreen extends Screen {
 
     @Override
     //? if >=26.1 {
-    /*public void extractRenderState(net.minecraft.client.gui.GuiGraphicsExtractor raw, int mouseX, int mouseY, float partialTick) {
+    /*public void extractRenderState(net.minecraft.client.gui.GuiGraphicsExtractor raw, int mouseX, int mouseY,
+            float partialTick) {
         super.extractRenderState(raw, mouseX, mouseY, partialTick);
     *///?} else if >=1.20.2 {
     public void render(net.minecraft.client.gui.GuiGraphics raw, int mouseX, int mouseY, float partialTick) {
@@ -322,11 +336,7 @@ public class AudioPlayerScreen extends Screen {
         super.render(raw, mouseX, mouseY, partialTick);
     *///?}
         if (tab != null) content().renderForeground(UiGraphics.of(raw), mouseX, mouseY, partialTick);
-        if (!dropdownUnfed()) UiDropdown.drawList(this, UiGraphics.of(raw), mouseX, mouseY);
-    }
-
-    private static boolean dropdownUnfed() {
-        return RigStaging.fault("tab-dropdown-unfed");
+        UiDropdown.drawList(this, UiGraphics.of(raw), mouseX, mouseY);
     }
 
     private void renderFooter(UiGraphics g) {
@@ -345,10 +355,11 @@ public class AudioPlayerScreen extends Screen {
         g.text(font, time, x + WINDOW_WIDTH - PADDING - timeWidth, y + 8, THEME.muted());
         int textX = x + 67;
         int room = x + WINDOW_WIDTH - PADDING - timeWidth - 10 - textX;
-        net.minecraft.network.chat.MutableComponent line = Component.literal(
+        MutableComponent line = Component.literal(
                 hasTrack() ? trackTitle : Component.translatable("gui.soundstage.player.no_track").getString());
         if (hasTrack() && !artist.isBlank()) {
-            line.append(Component.literal("  ·  " + artist).withStyle(style -> style.withColor(THEME.muted() & 0xFFFFFF)));
+            line.append(Component.literal("  ·  " + artist)
+                    .withStyle(style -> style.withColor(THEME.muted() & 0xFFFFFF)));
         }
         footerLine.draw(g, font, trackTitle + "\u0000" + artist, line, textX, y + 8, room,
                 hasTrack() ? THEME.text() : THEME.dim());
@@ -373,14 +384,14 @@ public class AudioPlayerScreen extends Screen {
     //? if >=1.21.11 {
     /*@Override
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
-        if (!dropdownUnfed() && UiDropdown.clickList(this, event.x(), event.y())) return true;
+        if (UiDropdown.clickList(this, event.x(), event.y())) return true;
         if (super.mouseClicked(event, doubleClick)) return true;
         return tab != null && content().mouseClicked(event.x(), event.y(), event.button());
     }
     *///?} else {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!dropdownUnfed() && UiDropdown.clickList(this, mouseX, mouseY)) return true;
+        if (UiDropdown.clickList(this, mouseX, mouseY)) return true;
         if (super.mouseClicked(mouseX, mouseY, button)) return true;
         return tab != null && content().mouseClicked(mouseX, mouseY, button);
     }
@@ -388,7 +399,7 @@ public class AudioPlayerScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (!dropdownUnfed() && UiDropdown.scrollList(this, scrollY)) return true;
+        if (UiDropdown.scrollList(this, scrollY)) return true;
         if (tab != null && content().mouseScrolled(mouseX, mouseY, scrollY)) return true;
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
@@ -396,14 +407,14 @@ public class AudioPlayerScreen extends Screen {
     //? if >=1.21.11 {
     /*@Override
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
-        if (!dropdownUnfed() && UiDropdown.keyList(this, event.key())) return true;
+        if (UiDropdown.keyList(this, event.key())) return true;
         if (tab != null && content().keyPressed(event.key(), event.scancode(), event.modifiers())) return true;
         return super.keyPressed(event);
     }
     *///?} else {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!dropdownUnfed() && UiDropdown.keyList(this, keyCode)) return true;
+        if (UiDropdown.keyList(this, keyCode)) return true;
         if (tab != null && content().keyPressed(keyCode, scanCode, modifiers)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }

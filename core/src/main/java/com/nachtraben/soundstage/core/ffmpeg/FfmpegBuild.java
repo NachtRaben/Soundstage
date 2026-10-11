@@ -19,7 +19,8 @@ public record FfmpegBuild(
         ZIP
     }
 
-    private static final String RELEASE = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/";
+    private static final String RELEASE =
+            "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/";
     private static final String VERSION = "n9.0.1-11-ge47273f4d9";
 
     public static final FfmpegBuild LINUX_X64 = pinned("linux64", Archive.TAR_XZ, 60_154_956L,

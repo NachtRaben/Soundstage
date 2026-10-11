@@ -1,5 +1,6 @@
 package com.nachtraben.soundstage.audio.media;
 
+import com.nachtraben.soundstage.core.video.TwitchVariants;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.source.twitch.TwitchStreamAudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.source.twitch.TwitchStreamAudioTrack;
@@ -18,21 +19,40 @@ public class TwitchVideoSourceManager extends TwitchStreamAudioSourceManager {
     interface Segments extends AutoCloseable {
         InputStream next() throws IOException;
 
+        default TwitchVariants.Variant chosen() {
+            return null;
+        }
+
+        default boolean betterWithReencode() {
+            return false;
+        }
+
         @Override
         void close();
     }
 
     interface Streaming {
-        Segments open(TwitchVideoSourceManager source, String channel, int maxHeight);
+        Segments open(TwitchVideoSourceManager source, String channel, int maxHeight, boolean reencodable);
     }
 
-    private static final Streaming REAL = (source, channel, maxHeight) -> {
-        TwitchVariantSegmentUrlProvider provider = new TwitchVariantSegmentUrlProvider(channel, source, maxHeight);
+    private static final Streaming REAL = (source, channel, maxHeight, reencodable) -> {
+        TwitchVariantSegmentUrlProvider provider =
+                new TwitchVariantSegmentUrlProvider(channel, source, maxHeight, reencodable);
         HttpInterface http = source.getHttpInterface();
         return new Segments() {
             @Override
             public InputStream next() {
                 return provider.getNextSegmentStream(http);
+            }
+
+            @Override
+            public TwitchVariants.Variant chosen() {
+                return provider.chosen();
+            }
+
+            @Override
+            public boolean betterWithReencode() {
+                return provider.betterWithReencode();
             }
 
             @Override

@@ -2,7 +2,9 @@ package com.nachtraben.soundstage.audio;
 
 import com.nachtraben.soundstage.network.LiveInputStateS2CPacket;
 import dev.armadeus.armalib.platform.network.Network;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -78,8 +80,8 @@ public final class LiveInputSessions {
             Network.sendToPlayer(player,
                     LiveInputStateS2CPacket.ended(session.pos(), session.id()));
             if (reason.messageKey != null) {
-                player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(reason.messageKey)
-                        .withStyle(net.minecraft.ChatFormatting.YELLOW));
+                player.sendSystemMessage(Component.translatable(reason.messageKey)
+                        .withStyle(ChatFormatting.YELLOW));
             }
         });
     }

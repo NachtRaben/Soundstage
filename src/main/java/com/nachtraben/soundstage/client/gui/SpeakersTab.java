@@ -1,21 +1,25 @@
 package com.nachtraben.soundstage.client.gui;
 
-import dev.armadeus.armalib.ui.UiDraw;
-import dev.armadeus.armalib.ui.UiGraphics;
-import dev.armadeus.armalib.ui.UiIcon;
-import dev.armadeus.armalib.ui.UiText;
 import com.nachtraben.soundstage.block.ReceiverBlockEntity;
 import com.nachtraben.soundstage.block.speaker.AbstractSpeakerBlock;
 import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
 import com.nachtraben.soundstage.core.ChannelMode;
 import com.nachtraben.soundstage.network.SpeakerRoutingC2SPacket;
 import dev.armadeus.armalib.platform.client.ClientNetwork;
+import dev.armadeus.armalib.ui.UiDraw;
+import dev.armadeus.armalib.ui.UiGraphics;
+import dev.armadeus.armalib.ui.UiIcon;
+import dev.armadeus.armalib.ui.UiText;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 final class SpeakersTab extends ReceiverTab {
 
@@ -96,7 +100,7 @@ final class SpeakersTab extends ReceiverTab {
     }
 
     private static Component modeLabel(ChannelMode mode) {
-        return Component.translatable("gui.soundstage.channel." + mode.name().toLowerCase(java.util.Locale.ROOT));
+        return Component.translatable("gui.soundstage.channel." + mode.name().toLowerCase(Locale.ROOT));
     }
 
     @Override
@@ -105,8 +109,8 @@ final class SpeakersTab extends ReceiverTab {
         var font = font();
         int left = x + AudioPlayerScreen.PADDING, right = right();
         Component hint = Component.translatable("gui.soundstage.receiver.channel_hint");
-        heading(g, Component.translatable("gui.soundstage.receiver.linked_speakers", speakers.size()), left, top + HEADING_Y,
-                right - font.width(hint) - 8);
+        heading(g, Component.translatable("gui.soundstage.receiver.linked_speakers", speakers.size()), left,
+                top + HEADING_Y, right - font.width(hint) - 8);
         g.text(font, hint, right - font.width(hint), top + HEADING_Y, THEME.dim());
 
         int listTop = listTop(), listBottom = listBottom();
@@ -128,8 +132,8 @@ final class SpeakersTab extends ReceiverTab {
             int distance = player == null ? -1 : (int) Math.round(Math.sqrt(player.distanceToSqr(
                     entry.pos.getX() + 0.5, entry.pos.getY() + 0.5, entry.pos.getZ() + 0.5)));
             g.text(font, Component.translatable(distance == 1 ? "gui.soundstage.receiver.speaker_where_one"
-                    : "gui.soundstage.receiver.speaker_where", entry.pos.getX(), entry.pos.getY(), entry.pos.getZ(), distance),
-                    left + 22, rowTop + 14, THEME.dim());
+                    : "gui.soundstage.receiver.speaker_where", entry.pos.getX(), entry.pos.getY(),
+                    entry.pos.getZ(), distance), left + 22, rowTop + 14, THEME.dim());
 
             int channelX = right - CHANNEL_WIDTH, channelTop = rowTop + (ROW_HEIGHT - 3 - CHANNEL_HEIGHT) / 2;
             boolean hot = inside(mouseX, mouseY, channelX, channelTop, CHANNEL_WIDTH, CHANNEL_HEIGHT)
@@ -138,8 +142,8 @@ final class SpeakersTab extends ReceiverTab {
                     hot ? THEME.surfaceRaised() : THEME.panel());
             Component label = modeLabel(entry.mode);
             g.text(font, label, channelX + (CHANNEL_WIDTH - font.width(label)) / 2, channelTop + 3, THEME.text());
-            UiDraw.iconCentred(g, UiIcon.CHEVRON_RIGHT, channelX + CHANNEL_WIDTH - 7, channelTop + CHANNEL_HEIGHT / 2.0, 7,
-                    hot ? THEME.text() : THEME.dim());
+            UiDraw.iconCentred(g, UiIcon.CHEVRON_RIGHT, channelX + CHANNEL_WIDTH - 7,
+                    channelTop + CHANNEL_HEIGHT / 2.0, 7, hot ? THEME.text() : THEME.dim());
         }
         if (unloaded > 0) {
             int rowTop = listTop - (int) scroll + speakers.size() * ROW_HEIGHT;
@@ -164,12 +168,12 @@ final class SpeakersTab extends ReceiverTab {
         int channelTop = listTop() - (int) scroll + row * ROW_HEIGHT + (ROW_HEIGHT - 3 - CHANNEL_HEIGHT) / 2;
         if (!inside(mouseX, mouseY, right() - CHANNEL_WIDTH, channelTop, CHANNEL_WIDTH, CHANNEL_HEIGHT)) return true;
         ChannelMode[] modes = validModes(entry.pos);
-        int at = java.util.Arrays.asList(modes).indexOf(entry.mode);
+        int at = Arrays.asList(modes).indexOf(entry.mode);
         int step = button == 1 ? -1 : 1;
         entry.mode = modes[Math.floorMod(at + step, modes.length)];
         ClientNetwork.sendToServer(new SpeakerRoutingC2SPacket(screen.pos, entry.pos, entry.mode.name()));
-        Minecraft.getInstance().getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
-                net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK, 1.0f));
+        Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(
+                SoundEvents.UI_BUTTON_CLICK, 1.0f));
         refreshTicks = 0;
         return true;
     }

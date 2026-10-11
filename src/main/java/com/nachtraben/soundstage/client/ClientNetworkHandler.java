@@ -6,6 +6,6 @@ import net.minecraft.client.Minecraft;
 
 public class ClientNetworkHandler {
     public static void handleOAuthRequest(OAuthRequestS2CPacket packet) {
-        net.minecraft.client.Minecraft.getInstance().setScreen(new OAuthScreen(packet.getVerificationUrl(), packet.getUserCode()));
+        Minecraft.getInstance().setScreen(new OAuthScreen(packet.getVerificationUrl(), packet.getUserCode()));
     }
 }

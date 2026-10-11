@@ -1,44 +1,34 @@
 package com.nachtraben.soundstage.client.audio;
 
-import com.nachtraben.soundstage.core.ChannelDownmix;
-import com.nachtraben.soundstage.core.LevelMeterModel;
-import com.nachtraben.soundstage.core.ConeExcursionModel;
-import com.nachtraben.soundstage.core.ChannelMode;
-import com.nachtraben.soundstage.core.SpeakerOutput;
 import com.nachtraben.soundstage.core.OpusCodec;
-import com.nachtraben.soundstage.core.SpeakerId;
 import com.nachtraben.soundstage.core.SpeakerAcoustics;
-import com.nachtraben.soundstage.core.SpeakerPriority;
-import com.nachtraben.soundstage.core.SpeakerHost;
 import com.nachtraben.soundstage.core.SpeakerDispatch;
-import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
+import com.nachtraben.soundstage.core.SpeakerHost;
+import com.nachtraben.soundstage.core.SpeakerId;
+import com.nachtraben.soundstage.core.SpeakerOutput;
+import com.nachtraben.soundstage.core.SpeakerPriority;
+import com.nachtraben.soundstage.core.StreamSyncState;
 import com.nachtraben.soundstage.network.AudioPacket;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.IntBuffer;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class AudioDecoder {
 
-    public static final java.util.concurrent.atomic.AtomicLong GROUP_RESTARTS =
-            new java.util.concurrent.atomic.AtomicLong();
-
-    public record GroupRestart(long arrivalGapMillis, long starvedMillis, int leadBefore, int leadAfter,
-                               boolean producerGap) {}
-
-    public static volatile GroupRestart lastGroupRestart;
-
-    public static final java.util.concurrent.atomic.AtomicLong RENUMBERS =
-            new java.util.concurrent.atomic.AtomicLong();
     private static final long MIN_STARVED_MILLIS = 60;
 
     private static final int MIN_LEAD_GROWTH_FRAMES = 5;
@@ -47,7 +37,7 @@ public class AudioDecoder {
 
     private static final int SAMPLE_RATE = OpusCodec.SAMPLE_RATE;
     private static final int CHANNELS = OpusCodec.CHANNELS;
-    
+
     private static final Map<BlockPos, ClientAudioReceiver> receivers = new ConcurrentHashMap<>();
 
     private record Listener(double x, double y, double z) {}
@@ -71,10 +61,6 @@ public class AudioDecoder {
 
     public static ClientAudioReceiver getReceiver(BlockPos pos) {
         return receivers.get(pos);
-    }
-
-    public static int receiverCount() {
-        return receivers.size();
     }
 
     public static void removeReceiver(BlockPos pos) {
@@ -106,27 +92,20 @@ public class AudioDecoder {
         }
     }
 
-    private static final java.util.concurrent.atomic.AtomicBoolean THREAD_REPORTED =
-            new java.util.concurrent.atomic.AtomicBoolean();
-    private static final java.util.concurrent.atomic.AtomicBoolean UNAVAILABLE_REPORTED =
-            new java.util.concurrent.atomic.AtomicBoolean();
-    private static final java.util.concurrent.atomic.AtomicLong DROPPED_WITHOUT_CODEC =
-            new java.util.concurrent.atomic.AtomicLong();
-
-    public static long droppedWithoutCodec() {
-        return DROPPED_WITHOUT_CODEC.get();
-    }
-
+    private static final AtomicBoolean THREAD_REPORTED =
+            new AtomicBoolean();
+    private static final AtomicBoolean UNAVAILABLE_REPORTED =
+            new AtomicBoolean();
     private static void reportAudioUnavailable() {
         if (!UNAVAILABLE_REPORTED.compareAndSet(false, true)) return;
-        org.slf4j.LoggerFactory.getLogger("Soundstage").error(
+        LoggerFactory.getLogger("Soundstage").error(
                 "Soundstage cannot play audio on this system: the Opus native library did not load for this "
                         + "platform, so incoming audio is being dropped.", OpusCodec.unavailableCause());
         Minecraft.getInstance().execute(() -> {
             var player = Minecraft.getInstance().player;
             if (player != null) {
-                var message = net.minecraft.network.chat.Component.translatable(
-                        "chat.soundstage.audio_unavailable").withStyle(net.minecraft.ChatFormatting.RED);
+                var message = Component.translatable(
+                        "chat.soundstage.audio_unavailable").withStyle(ChatFormatting.RED);
                 //? if >=26.1 {
                 /*player.sendSystemMessage(message);
                 *///?} else {
@@ -138,14 +117,13 @@ public class AudioDecoder {
 
     public static void handlePacket(AudioPacket packet) {
         if (!OpusCodec.available()) {
-            DROPPED_WITHOUT_CODEC.incrementAndGet();
             reportAudioUnavailable();
             return;
         }
         Listener here = listener;
         if (here == null) return;
         if (!THREAD_REPORTED.getAndSet(true)) {
-            org.slf4j.LoggerFactory.getLogger("Soundstage").info("Soundstage: audio packets are handled on {}{}",
+            LoggerFactory.getLogger("Soundstage").info("Soundstage: audio packets are handled on {}{}",
                     Thread.currentThread().getName(),
                     Minecraft.getInstance().isSameThread() ? " (the main thread)" : " (not the main thread)");
         }
@@ -164,7 +142,7 @@ public class AudioDecoder {
             }
 
             for (int i = 0; i < packet.speakers.size(); i++) {
-                com.nachtraben.soundstage.core.SpeakerAcoustics a =
+                SpeakerAcoustics a =
                         i < packet.acoustics.size() ? packet.acoustics.get(i) : null;
                 BlockPos speaker = packet.speakers.get(i);
                 if (a != null) receiver.declaredAcoustics.put(speaker, a);
@@ -178,15 +156,10 @@ public class AudioDecoder {
             }
             receiver.arrivalLateness.observe(packet.sequenceNumber, nowNanos);
             int recommendedLead = receiver.arrivalLateness.leadFrames(
-                    nowNanos, com.nachtraben.soundstage.core.StreamSyncState.PREROLL_FRAMES);
-            if (com.nachtraben.soundstage.RigStaging.fault("lead-fixed")) {
-                recommendedLead = com.nachtraben.soundstage.core.StreamSyncState.PREROLL_FRAMES;
-            }
+                    nowNanos, StreamSyncState.PREROLL_FRAMES);
             receiver.latenessFrames = (int) (receiver.arrivalLateness.peakLatenessNanos(nowNanos) / 20_000_000L);
 
             if (packet.sequenceNumber == 0) {
-
-                RENUMBERS.incrementAndGet();
                 receiver.ring.clear();
                 receiver.timeline().clear();
                 receiver.resumeFloorSequence = -1;
@@ -209,7 +182,7 @@ public class AudioDecoder {
 
                 receiver.traceOutput(packet.sequenceNumber, rawPcm, packet.speakers.size());
 
-                java.util.List<BlockPos> playAt = packet.speakers;
+                List<BlockPos> playAt = packet.speakers;
 
                 if (playAt.size() > 1) {
                     List<SpeakerId> ids = new ArrayList<>(playAt.size());
@@ -242,13 +215,9 @@ public class AudioDecoder {
                             }
                         }
                         if (packet.sequenceNumber != 0 && played > receiver.resumeFloorSequence
-                                && played <= receiver.ring.highestSequence() + receiver.leadFrames
-                                && !com.nachtraben.soundstage.RigStaging.fault("resume-floor-ignored")) {
+                                && played <= receiver.ring.highestSequence() + receiver.leadFrames) {
                             receiver.resumeFloorSequence = played;
                         }
-                        lastGroupRestart = new GroupRestart(sinceLast / 1_000_000L, starvedMillis,
-                                receiver.leadFrames, recommendedLead, packet.resumedAfterGap);
-                        GROUP_RESTARTS.incrementAndGet();
                     }
                 }
 
@@ -273,7 +242,7 @@ public class AudioDecoder {
                     }
                 }
 
-                java.util.Set<BlockPos> targetSet = new java.util.HashSet<>(playAt);
+                Set<BlockPos> targetSet = new HashSet<>(playAt);
                 boolean deviceClockJoin = JitterAudioStream.canAlignJoin(receiver);
                 if (!receiver.streams.isEmpty()) {
                     boolean joining = false;
@@ -287,7 +256,6 @@ public class AudioDecoder {
                         for (StreamingSoundInstance held : receiver.streams.values()) {
                             held.setNeedsRestart(true);
                         }
-                        GROUP_RESTARTS.incrementAndGet();
                     }
                 }
                 receiver.lastDispatchTargets = targetSet;
@@ -318,8 +286,8 @@ public class AudioDecoder {
         }
 
         @Override
-        public java.util.Set<SpeakerId> heldSpeakers() {
-            java.util.Set<SpeakerId> out = new java.util.LinkedHashSet<>();
+        public Set<SpeakerId> heldSpeakers() {
+            Set<SpeakerId> out = new LinkedHashSet<>();
             for (BlockPos pos : receiver.streams.keySet()) {
                 out.add(new SpeakerId(pos.getX(), pos.getY(), pos.getZ()));
             }

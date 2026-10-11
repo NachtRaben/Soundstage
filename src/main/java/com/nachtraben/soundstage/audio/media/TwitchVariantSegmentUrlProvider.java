@@ -10,6 +10,8 @@ import com.sedmelluq.discord.lavaplayer.tools.io.HttpClientTools;
 import com.sedmelluq.discord.lavaplayer.tools.io.HttpInterface;
 import dev.armadeus.armalib.lavaplayer.shadow.org.apache.http.client.methods.CloseableHttpResponse;
 import dev.armadeus.armalib.lavaplayer.shadow.org.apache.http.client.methods.HttpGet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,7 +26,7 @@ final class TwitchVariantSegmentUrlProvider extends TwitchStreamSegmentUrlProvid
 
     static final int SOUND_ONLY = 0;
     private static final int MAX_INIT_BYTES = 1 << 20;
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     static final class NoFittingPicture extends IllegalStateException {
         NoFittingPicture(String message) {
@@ -34,16 +36,20 @@ final class TwitchVariantSegmentUrlProvider extends TwitchStreamSegmentUrlProvid
 
     private final String channel;
     private final int maxHeight;
-    private String chosen;
+    private final boolean reencodable;
+    private volatile TwitchVariants.Variant chosen;
+    private volatile List<TwitchVariants.Variant> offered = List.of();
     private Map<String, String> initFor = Map.of();
     private String initUrl;
     private Fmp4Init init;
     private final Fmp4ToTs repackager = new Fmp4ToTs();
 
-    TwitchVariantSegmentUrlProvider(String channel, TwitchStreamAudioSourceManager manager, int maxHeight) {
+    TwitchVariantSegmentUrlProvider(String channel, TwitchStreamAudioSourceManager manager, int maxHeight,
+                                    boolean reencodable) {
         super(channel, manager);
         this.channel = channel;
         this.maxHeight = maxHeight;
+        this.reencodable = reencodable;
     }
 
     @Override
@@ -51,25 +57,40 @@ final class TwitchVariantSegmentUrlProvider extends TwitchStreamSegmentUrlProvid
         List<ChannelStreamInfo> listed = super.loadChannelStreamsList(lines);
         if (maxHeight <= SOUND_ONLY) return listed;
         List<TwitchVariants.Variant> variants = TwitchVariants.parse(lines);
-        Optional<TwitchVariants.Variant> choice = TwitchVariants.choose(variants, maxHeight);
+        offered = variants;
+        Optional<TwitchVariants.Variant> choice = TwitchVariants.choose(variants, maxHeight, reencodable);
         if (choice.isEmpty()) {
-            throw new NoFittingPicture("Twitch channel " + channel + " offers no H.264 picture at most " + maxHeight
-                    + " lines tall (" + describe(variants) + ")");
+            throw new NoFittingPicture("Twitch channel " + channel + (reencodable
+                    ? " offers no picture in H.264 or HEVC ("
+                    : " offers no picture that can be passed through as it is (H.264 Main profile, at most 30 "
+                    + "frames a second, at most " + maxHeight + " lines tall), and none can be re-encoded now (")
+                    + describe(variants) + ")");
         }
         TwitchVariants.Variant variant = choice.get();
         for (ChannelStreamInfo stream : listed) {
             if (variant.name().equals(stream.quality)) {
-                if (!variant.name().equals(chosen)) {
-                    chosen = variant.name();
-                    LOGGER.info("Soundstage: Twitch channel {} shows its picture from {} ({}x{} at {} fps) of {}.",
+                TwitchVariants.Variant before = chosen;
+                if (before == null || !variant.name().equals(before.name())) {
+                    LOGGER.info("Soundstage: Twitch channel {} shows its picture from {} ({}x{} at {} fps, {}) of {}.",
                             channel, variant.name(), variant.width(), variant.height(), variant.frameRate(),
-                            describe(variants));
+                            variant.codecs(), describe(variants));
                 }
+                chosen = variant;
                 return List.of(stream);
             }
         }
         throw new NoFittingPicture("Twitch channel " + channel + ": LavaPlayer did not list rendition "
                 + variant.name());
+    }
+
+    TwitchVariants.Variant chosen() {
+        return chosen;
+    }
+
+    boolean betterWithReencode() {
+        TwitchVariants.Variant now = chosen;
+        if (reencodable || now == null) return false;
+        return TwitchVariants.choose(offered, maxHeight, true).map(v -> !v.name().equals(now.name())).orElse(false);
     }
 
     @Override

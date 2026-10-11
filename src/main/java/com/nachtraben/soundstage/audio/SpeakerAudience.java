@@ -1,5 +1,7 @@
 package com.nachtraben.soundstage.audio;
 
+import com.nachtraben.soundstage.core.ChannelMode;
+import com.nachtraben.soundstage.core.SpeakerAcoustics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
@@ -13,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class SpeakerAudience {
 
@@ -30,15 +33,15 @@ public final class SpeakerAudience {
         return new Key(level.dimension(), pos.asLong());
     }
 
-    private static final java.util.Map<Key, com.nachtraben.soundstage.core.SpeakerAcoustics> ACOUSTICS =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<Key, SpeakerAcoustics> ACOUSTICS =
+            new ConcurrentHashMap<>();
 
     private record VolumeSnapshot(long publicationId, int percent) {}
 
-    private static final java.util.Map<Key, VolumeSnapshot> VOLUMES =
-            new java.util.concurrent.ConcurrentHashMap<>();
-    private static final java.util.concurrent.atomic.AtomicLong NEXT_PUBLICATION_ID =
-            new java.util.concurrent.atomic.AtomicLong();
+    private static final Map<Key, VolumeSnapshot> VOLUMES =
+            new ConcurrentHashMap<>();
+    private static final AtomicLong NEXT_PUBLICATION_ID =
+            new AtomicLong();
 
     public static long nextPublicationId() {
         return NEXT_PUBLICATION_ID.incrementAndGet();
@@ -60,13 +63,13 @@ public final class SpeakerAudience {
                 snapshot.publicationId() == publicationId ? null : snapshot);
     }
 
-    private record ChannelSnapshot(long publicationId, com.nachtraben.soundstage.core.ChannelMode mode) {}
+    private record ChannelSnapshot(long publicationId, ChannelMode mode) {}
 
-    private static final java.util.Map<Key, ChannelSnapshot> CHANNELS =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<Key, ChannelSnapshot> CHANNELS =
+            new ConcurrentHashMap<>();
 
     public static void publishChannel(ServerLevel level, BlockPos pos, long publicationId,
-                                      com.nachtraben.soundstage.core.ChannelMode mode) {
+                                      ChannelMode mode) {
         if (mode != null) CHANNELS.put(keyOf(level, pos), new ChannelSnapshot(publicationId, mode));
     }
 
@@ -90,17 +93,17 @@ public final class SpeakerAudience {
         return left && right;
     }
 
-    public static com.nachtraben.soundstage.core.SpeakerAcoustics acousticsFor(ServerLevel level, BlockPos pos) {
+    public static SpeakerAcoustics acousticsFor(ServerLevel level, BlockPos pos) {
         return ACOUSTICS.get(keyOf(level, pos));
     }
 
     public static void publishAcoustics(ServerLevel level, BlockPos pos,
-                                        com.nachtraben.soundstage.core.SpeakerAcoustics acoustics) {
+                                        SpeakerAcoustics acoustics) {
         if (acoustics != null) ACOUSTICS.put(keyOf(level, pos), acoustics);
     }
 
     public static void publish(ServerLevel level, BlockPos pos, List<ServerPlayer> listeners,
-                               com.nachtraben.soundstage.core.SpeakerAcoustics acoustics) {
+                               SpeakerAcoustics acoustics) {
         if (acoustics != null) ACOUSTICS.put(keyOf(level, pos), acoustics);
         publish(level, pos, listeners);
     }
@@ -110,12 +113,11 @@ public final class SpeakerAudience {
     }
 
     public static void forget(Level level, BlockPos pos) {
-        if (com.nachtraben.soundstage.RigStaging.fault("no-forget")) return;
         AUDIENCES.remove(keyOf(level, pos));
     }
 
     public static void forgetAcoustics(Level level, BlockPos pos,
-                                       com.nachtraben.soundstage.core.SpeakerAcoustics published) {
+                                       SpeakerAcoustics published) {
         if (published == null) return;
         Key key = keyOf(level, pos);
         ACOUSTICS.remove(key, published);
@@ -129,9 +131,6 @@ public final class SpeakerAudience {
     }
 
     public static Set<ServerPlayer> collect(ServerLevel level, Collection<BlockPos> emitters) {
-        if (com.nachtraben.soundstage.RigStaging.fault("union-drops-speaker") && emitters.size() > 1) {
-            emitters = java.util.List.of(emitters.iterator().next());
-        }
         long now = level.getGameTime();
         Set<ServerPlayer> recipients = new LinkedHashSet<>();
         for (BlockPos pos : emitters) {

@@ -5,9 +5,13 @@ import com.nachtraben.soundstage.core.video.CueParser;
 import com.nachtraben.soundstage.core.video.CueTrack;
 import com.nachtraben.soundstage.core.video.FfmpegCommand;
 import com.nachtraben.soundstage.core.video.MediaProbe;
+import com.nachtraben.soundstage.core.video.PictureSize;
+import com.nachtraben.soundstage.core.video.StillImage;
 import com.nachtraben.soundstage.core.video.SubtitleCue;
 import com.nachtraben.soundstage.core.video.YoutubeStreams;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -22,12 +26,13 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static com.sedmelluq.discord.lavaplayer.tools.FriendlyException.Severity.COMMON;
 
 final class Ffmpeg {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     private static final long VERSION_TIMEOUT_SECONDS = 5;
     private static final long PROBE_TIMEOUT_SECONDS = 10;
@@ -48,7 +53,6 @@ final class Ffmpeg {
 
     static String path() {
         String configured = SoundstageConfig.ffmpegPath();
-        if (com.nachtraben.soundstage.RigStaging.fault("ffmpeg-missing")) return "/nonexistent/soundstage-rig-ffmpeg";
         String chosen = configured == null || configured.isBlank() ? DEFAULT_PATH : configured.strip();
         if (chosen.equals(DEFAULT_PATH)) {
             String downloaded = FfmpegDownload.ffmpeg();
@@ -158,7 +162,7 @@ final class Ffmpeg {
         return probe(ffprobe -> MediaProbe.command(ffprobe, input), name);
     }
 
-    static MediaProbe probe(java.util.function.Function<String, List<String>> command, String name)
+    static MediaProbe probe(Function<String, List<String>> command, String name)
             throws InterruptedException {
         String ffmpeg = path();
         for (String ffprobe : FfmpegCommand.ffprobeCandidates(ffmpeg)) {
@@ -216,38 +220,57 @@ final class Ffmpeg {
         if (process.exitValue() != 0) {
             LOGGER.warn("Soundstage: {} could not read media file {} (exit {}): {}", ffprobe, name,
                     process.exitValue(), said);
-            throw new FriendlyException("ffmpeg cannot read that media file.", COMMON, null);
+            throw new FriendlyException("That media file can't be read.", COMMON, null);
         }
         try {
             return MediaProbe.parse(json.toString(StandardCharsets.UTF_8));
         } catch (IOException e) {
             LOGGER.warn("Soundstage: {} gave an answer about media file {} that could not be read: {}",
                     ffprobe, name, e.toString());
-            throw new FriendlyException("ffmpeg cannot read that media file.", COMMON, e);
+            throw new FriendlyException("That media file can't be read.", COMMON, e);
         }
     }
 
-    static Transcode transcode(Path file, String name, long startMillis, int maxHeight, MediaProbe probe,
+    static Transcode transcode(Path file, String name, long startMillis, PictureSize.Copy picture, MediaProbe probe,
                                boolean toneMap) throws IOException {
         List<String> command = FfmpegCommand.transcode(path(), FfmpegCommand.input(file), startMillis,
-                maxHeight, probe, toneMap);
+                picture, probe, toneMap);
         return adopt(new ProcessBuilder(command).start(), name);
     }
 
-    static Transcode transcode(YoutubeStreams.Streams streams, String name, long startMillis, int maxHeight)
-            throws IOException {
-        List<String> command = FfmpegCommand.transcodeUrls(path(), streams, startMillis, maxHeight);
+    static Transcode still(Path file, String name, StillImage.Type type,
+                           PictureSize.Copy picture) throws IOException {
+        List<String> command = FfmpegCommand.still(path(), FfmpegCommand.input(file), type, picture);
         return adopt(new ProcessBuilder(command).start(), name);
+    }
+
+    static Transcode silence(String name, long startMillis, long durationMillis) throws IOException {
+        List<String> command = FfmpegCommand.silence(path(), startMillis, durationMillis);
+        return adopt(new ProcessBuilder(command).start(), name);
+    }
+
+    static Transcode transcode(YoutubeStreams.Streams streams, String name, long startMillis, PictureSize.Copy picture)
+            throws IOException {
+        List<String> command = FfmpegCommand.transcodeUrls(path(), streams, startMillis, picture);
+        return adopt(new ProcessBuilder(command).start(), name);
+    }
+
+    static Transcode transcodeSound(YoutubeStreams.Streams streams, String name, long startMillis) throws IOException {
+        List<String> command = FfmpegCommand.transcodeSoundUrl(path(), streams, startMillis);
+        return adopt(new ProcessBuilder(command).start(), name);
+    }
+
+    static Process liveReencode(PictureSize.Copy picture) throws IOException {
+        return new ProcessBuilder(FfmpegCommand.liveReencode(path(), picture)).start();
     }
 
     private static final int SUBTITLE_OUTPUT_LIMIT = 4 * (1 << 20);
     private static final long SUBTITLE_TIMEOUT_SECONDS = 600;
     private static final long SUBTITLE_PUBLISH_NANOS = 1_000_000_000L;
 
-    private static final long RIG_SUBTITLE_LATE_MILLIS = 5_000;
-
     static void subtitles(Path file, String name, MediaProbe.Subtitle track, BooleanSupplier wanted,
                           Consumer<CueTrack> publish) {
+        if (!wanted.getAsBoolean()) return;
         String ffmpeg = path();
         List<String> command = FfmpegCommand.subtitles(ffmpeg, FfmpegCommand.input(file), track.index());
         Process process;
@@ -292,7 +315,9 @@ final class Ffmpeg {
                 finished = process.waitFor(250, TimeUnit.MILLISECONDS);
                 if (!wanted.getAsBoolean()) return;
                 long now = System.nanoTime();
-                if (finished || overLimit[0] || now - started > TimeUnit.SECONDS.toNanos(SUBTITLE_TIMEOUT_SECONDS)) break;
+                if (finished || overLimit[0] || now - started > TimeUnit.SECONDS.toNanos(SUBTITLE_TIMEOUT_SECONDS)) {
+                    break;
+                }
                 if (now - published >= SUBTITLE_PUBLISH_NANOS) {
                     published = now;
                     handedOn = publishCues(vtt, false, handedOn, publish);
@@ -338,9 +363,6 @@ final class Ffmpeg {
         }
         List<SubtitleCue> cues = CueParser.parseWebVtt(text);
         if (cues.size() <= handedOn) return handedOn;
-        if (com.nachtraben.soundstage.RigStaging.fault("subtitle-late")) {
-            cues = cues.stream().map(cue -> cue.shifted(RIG_SUBTITLE_LATE_MILLIS)).toList();
-        }
         publish.accept(new CueTrack(cues));
         return cues.size();
     }
@@ -374,9 +396,12 @@ final class Ffmpeg {
             return process.getInputStream();
         }
 
+        long pid() {
+            return process.pid();
+        }
+
         void abandon() {
             abandoned = true;
-            if (com.nachtraben.soundstage.RigStaging.fault("ffmpeg-orphaned")) return;
             process.destroy();
         }
 
@@ -417,8 +442,7 @@ final class Ffmpeg {
         }
     }
 
-    private static void stop(Process process) {
-        if (com.nachtraben.soundstage.RigStaging.fault("ffmpeg-orphaned")) return;
+    static void stop(Process process) {
         closeQuietly(process.getInputStream());
         closeQuietly(process.getErrorStream());
         process.destroy();
@@ -436,13 +460,13 @@ final class Ffmpeg {
         }
     }
 
-    private static Thread daemon(String name, Runnable body) {
+    static Thread daemon(String name, Runnable body) {
         Thread thread = new Thread(body, name);
         thread.setDaemon(true);
         return thread;
     }
 
-    private static void readLines(InputStream stream, java.util.function.Consumer<String> sink) {
+    static void readLines(InputStream stream, Consumer<String> sink) {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             for (String line; (line = reader.readLine()) != null; ) {
                 if (!line.isBlank()) sink.accept(line.strip());

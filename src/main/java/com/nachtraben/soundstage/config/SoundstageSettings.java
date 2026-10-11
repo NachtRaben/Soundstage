@@ -28,5 +28,9 @@ public interface SoundstageSettings extends AudioSourceSettings {
 
     default boolean downloadFfmpeg() { return false; }
 
-    default int maxVideoHeight() { return 480; }
+    default int maxVideoHeight() { return 1080; }
+
+    default int maxPicturesEncoding() { return 0; }
+
+    default int imageDisplaySeconds() { return 10; }
 }

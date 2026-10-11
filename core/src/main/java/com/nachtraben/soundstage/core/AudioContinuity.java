@@ -1,5 +1,9 @@
 package com.nachtraben.soundstage.core;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 public final class AudioContinuity {
 
     private AudioContinuity() {}
@@ -47,14 +51,14 @@ public final class AudioContinuity {
                                                              int[][] pauses, int maxResumeLatencySamples,
                                                              int exemptFromSample, int exemptToSample) {
         int[] latencies = new int[pauses == null ? 0 : pauses.length];
-        java.util.Arrays.fill(latencies, -1);
+        Arrays.fill(latencies, -1);
         if (samples == null || windowLength <= 0) return new PauseAwareResult(0, latencies);
         int windows = samples.length / windowLength;
         if (windows < 3) return new PauseAwareResult(0, latencies);
 
         double[] peaks = new double[windows];
         boolean[] paused = new boolean[windows];
-        java.util.List<Double> active = new java.util.ArrayList<>();
+        List<Double> active = new ArrayList<>();
         for (int w = 0; w < windows; w++) {
             int peak = 0;
             int base = w * windowLength;
@@ -108,7 +112,7 @@ public final class AudioContinuity {
 
     private static double median(double[] values) {
         double[] sorted = values.clone();
-        java.util.Arrays.sort(sorted);
+        Arrays.sort(sorted);
         int mid = sorted.length / 2;
         return sorted.length % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2.0 : sorted[mid];
     }

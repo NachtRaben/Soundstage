@@ -1,20 +1,56 @@
 package com.nachtraben.soundstage.network;
 
-import com.nachtraben.soundstage.util.Players;
+import com.nachtraben.soundstage.audio.AudioManager;
+import com.nachtraben.soundstage.audio.AudioManagerState;
+import com.nachtraben.soundstage.audio.LiveInputSessions;
+import com.nachtraben.soundstage.audio.MetadataViewers;
+import com.nachtraben.soundstage.audio.SpeakerAudience;
+import com.nachtraben.soundstage.audio.TrackScheduler;
+import com.nachtraben.soundstage.audio.media.MediaBrowseRequests;
+import com.nachtraben.soundstage.audio.video.VideoRelay;
+import com.nachtraben.soundstage.block.IAudioReceiver;
+import com.nachtraben.soundstage.block.ReceiverBlockEntity;
+import com.nachtraben.soundstage.block.ScreenBlock;
+import com.nachtraben.soundstage.block.ScreenBlockEntity;
+import com.nachtraben.soundstage.block.speaker.AbstractSpeakerBlock;
+import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
+import com.nachtraben.soundstage.client.ClientNetworkHandler;
+import com.nachtraben.soundstage.client.SoundstageClientInit;
 import com.nachtraben.soundstage.client.audio.AudioDecoder;
+import com.nachtraben.soundstage.client.audio.LiveInputClient;
 import com.nachtraben.soundstage.client.gui.AudioPlayerScreen;
+import com.nachtraben.soundstage.client.gui.MediaBrowseScreen;
+import com.nachtraben.soundstage.client.gui.NowPlayingToast;
+import com.nachtraben.soundstage.client.video.ClientDisplayInfo;
+import com.nachtraben.soundstage.client.video.ClientSubtitleOptions;
+import com.nachtraben.soundstage.client.video.ClientSubtitles;
+import com.nachtraben.soundstage.client.video.ClientVideoReceivers;
+import com.nachtraben.soundstage.config.SoundstageAppearance;
+import com.nachtraben.soundstage.config.SoundstageConfig;
+import com.nachtraben.soundstage.core.ChannelMode;
+import com.nachtraben.soundstage.core.video.DisplayLayout;
+import com.nachtraben.soundstage.item.SpeakerLinkItem;
+import com.nachtraben.soundstage.util.PlayerMessage;
+import com.nachtraben.soundstage.util.Players;
+import com.nachtraben.soundstage.util.WorldAccess;
 import dev.armadeus.armalib.core.network.HandlerThread;
-import dev.armadeus.armalib.platform.Platform;
 import dev.armadeus.armalib.platform.client.ClientNetwork;
 import dev.armadeus.armalib.platform.network.Network;
 import dev.armadeus.armalib.platform.network.ServerPayloadContext;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import com.nachtraben.soundstage.audio.AudioManager;
-import com.nachtraben.soundstage.audio.SpeakerAudience;
-import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class NetworkHandler {
 
@@ -23,41 +59,43 @@ public class NetworkHandler {
             AudioDecoder.handlePacket(payload);
         });
         ClientNetwork.handle(OAuthRequestS2CPacket.TYPE, (payload, context) -> {
-            context.queue(() -> com.nachtraben.soundstage.client.ClientNetworkHandler.handleOAuthRequest(payload));
+            context.queue(() -> ClientNetworkHandler.handleOAuthRequest(payload));
         });
         ClientNetwork.handle(SpeakerMetadataS2CPacket.TYPE, (payload, context) -> {
             context.queue(() -> {
-                if (net.minecraft.client.Minecraft.getInstance().screen instanceof AudioPlayerScreen screen) {
+                if (Minecraft.getInstance().screen instanceof AudioPlayerScreen screen) {
                     screen.updateMetadata(payload);
                 }
             });
         });
         ClientNetwork.handle(NowPlayingS2CPacket.TYPE, (payload, context) -> {
             context.queue(() -> {
-                if (!com.nachtraben.soundstage.config.SoundstageAppearance.trackChangeToast()) return;
-                String artwork = com.nachtraben.soundstage.config.SoundstageAppearance.trackChangeToastArtwork()
+                if (!SoundstageAppearance.trackChangeToast()) return;
+                String artwork = SoundstageAppearance.trackChangeToastArtwork()
                         ? payload.getArtworkUrl() : "";
-                com.nachtraben.soundstage.client.gui.NowPlayingToast.show(
+                NowPlayingToast.show(
                         payload.getReceiverPos(), payload.getTitle(), payload.getArtist(), artwork);
             });
         });
         ClientNetwork.handle(LiveInputStateS2CPacket.TYPE, (payload, context) -> {
-            context.queue(() -> com.nachtraben.soundstage.client.audio.LiveInputClient.onServerState(payload));
+            context.queue(() -> LiveInputClient.onServerState(payload));
         });
         ClientNetwork.handle(VideoPacket.TYPE, (payload, context) -> {
-            context.queue(() -> com.nachtraben.soundstage.client.video.ClientVideoReceivers.handle(payload));
+            context.queue(() -> ClientVideoReceivers.handle(payload));
         });
         ClientNetwork.handle(SubtitlePacket.TYPE, (payload, context) -> {
-            context.queue(() -> com.nachtraben.soundstage.client.video.ClientSubtitles.handle(payload));
+            context.queue(() -> ClientSubtitles.handle(payload));
         });
         ClientNetwork.handle(SubtitleOptionsS2CPacket.TYPE, (payload, context) ->
-                context.queue(() -> com.nachtraben.soundstage.client.video.ClientSubtitleOptions.handle(payload)));
+                context.queue(() -> ClientSubtitleOptions.handle(payload)));
         ClientNetwork.handle(DisplayInfoS2CPacket.TYPE, (payload, context) -> {
-            context.queue(() -> com.nachtraben.soundstage.client.video.ClientDisplayInfo.handle(payload));
+            context.queue(() -> ClientDisplayInfo.handle(payload));
         });
+        ClientNetwork.handle(RemoteOpenS2CPacket.TYPE, (payload, context) ->
+                context.queue(() -> SoundstageClientInit.openFromRemote(payload.receiverPos())));
         ClientNetwork.handle(MediaBrowseReplyS2CPacket.TYPE, (payload, context) -> {
             context.queue(() -> {
-                if (net.minecraft.client.Minecraft.getInstance().screen instanceof com.nachtraben.soundstage.client.gui.MediaBrowseScreen screen) {
+                if (Minecraft.getInstance().screen instanceof MediaBrowseScreen screen) {
                     screen.updateResults(payload);
                 }
             });
@@ -70,53 +108,57 @@ public class NetworkHandler {
         Network.playToClient(SpeakerMetadataS2CPacket.TYPE, SpeakerMetadataS2CPacket.STREAM_CODEC, HandlerThread.MAIN);
         Network.playToClient(NowPlayingS2CPacket.TYPE, NowPlayingS2CPacket.STREAM_CODEC, HandlerThread.MAIN);
         Network.playToClient(LiveInputStateS2CPacket.TYPE, LiveInputStateS2CPacket.STREAM_CODEC, HandlerThread.MAIN);
-        if (!Platform.isClient()
-                && com.nachtraben.soundstage.RigStaging.serverStages("soundstage:dedicated-video", "undeclared-video")) {
-            org.slf4j.LoggerFactory.getLogger("Soundstage").warn("Soundstage: red control — VideoPacket is "
-                    + "not declared on this server (undeclared-video), so no "
-                    + "screen will get a picture");
-        } else {
-            Network.playToClient(VideoPacket.TYPE, VideoPacket.STREAM_CODEC, HandlerThread.MAIN);
-        }
-        Network.playToClient(MediaBrowseReplyS2CPacket.TYPE, MediaBrowseReplyS2CPacket.STREAM_CODEC, HandlerThread.MAIN);
+        Network.playToClient(VideoPacket.TYPE, VideoPacket.STREAM_CODEC, HandlerThread.MAIN);
+        Network.playToClient(MediaBrowseReplyS2CPacket.TYPE, MediaBrowseReplyS2CPacket.STREAM_CODEC,
+                HandlerThread.MAIN);
         Network.playToClient(SubtitlePacket.TYPE, SubtitlePacket.STREAM_CODEC, HandlerThread.MAIN);
         Network.playToClient(SubtitleOptionsS2CPacket.TYPE, SubtitleOptionsS2CPacket.STREAM_CODEC, HandlerThread.MAIN);
-        if (!Platform.isClient() && com.nachtraben.soundstage.RigStaging.serverStages(
-                "soundstage:dedicated-join", "undeclared-s2c")) {
-            org.slf4j.LoggerFactory.getLogger("Soundstage").warn("Soundstage: red control — "
-                    + "DisplayInfoS2CPacket is not declared on this server (rig soundstage:dedicated-join)");
-        } else {
-            Network.playToClient(DisplayInfoS2CPacket.TYPE, DisplayInfoS2CPacket.STREAM_CODEC, HandlerThread.MAIN);
-        }
+        Network.playToClient(RemoteOpenS2CPacket.TYPE, RemoteOpenS2CPacket.STREAM_CODEC, HandlerThread.MAIN);
+        Network.playToClient(DisplayInfoS2CPacket.TYPE, DisplayInfoS2CPacket.STREAM_CODEC, HandlerThread.MAIN);
 
-        Network.playToServer(LiveAudioC2SPacket.TYPE, LiveAudioC2SPacket.STREAM_CODEC, HandlerThread.NETWORK, (payload, context) -> {
-            com.nachtraben.soundstage.audio.LiveInputSessions.offer(context.player().getUUID(), payload.opus);
+        Network.playToServer(LiveAudioC2SPacket.TYPE, LiveAudioC2SPacket.STREAM_CODEC, HandlerThread.NETWORK,
+                (payload, context) -> {
+            LiveInputSessions.offer(context.player().getUUID(), payload.opus);
         });
-        Network.playToServer(SpeakerControlC2SPacket.TYPE, SpeakerControlC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleSpeakerControlPacket);
-        Network.playToServer(SpeakerRoutingC2SPacket.TYPE, SpeakerRoutingC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleSpeakerRoutingPacket);
-        Network.playToServer(SpeakerAimC2SPacket.TYPE, SpeakerAimC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleSpeakerAimPacket);
-        Network.playToServer(SpeakerRangeC2SPacket.TYPE, SpeakerRangeC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleSpeakerRangePacket);
-        Network.playToServer(SpeakerGrilleC2SPacket.TYPE, SpeakerGrilleC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleSpeakerGrillePacket);
-        Network.playToServer(QueueOpC2SPacket.TYPE, QueueOpC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleQueueOpPacket);
-        Network.playToServer(SpeakerDelayC2SPacket.TYPE, SpeakerDelayC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleSpeakerDelayPacket);
-        Network.playToServer(SpeakerVolumeC2SPacket.TYPE, SpeakerVolumeC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleSpeakerVolumePacket);
-        Network.playToServer(MediaBrowseRequestC2SPacket.TYPE, MediaBrowseRequestC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleMediaBrowseRequest);
-        Network.playToServer(ScreenFitModeC2SPacket.TYPE, ScreenFitModeC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleScreenFitModePacket);
-        Network.playToServer(SubtitleChoiceC2SPacket.TYPE, SubtitleChoiceC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleSubtitleChoicePacket);
-        Network.playToServer(DisplayUnlinkC2SPacket.TYPE, DisplayUnlinkC2SPacket.STREAM_CODEC, HandlerThread.MAIN, NetworkHandler::handleDisplayUnlinkPacket);
+        Network.playToServer(SpeakerControlC2SPacket.TYPE, SpeakerControlC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleSpeakerControlPacket);
+        Network.playToServer(SpeakerRoutingC2SPacket.TYPE, SpeakerRoutingC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleSpeakerRoutingPacket);
+        Network.playToServer(SpeakerAimC2SPacket.TYPE, SpeakerAimC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleSpeakerAimPacket);
+        Network.playToServer(SpeakerRangeC2SPacket.TYPE, SpeakerRangeC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleSpeakerRangePacket);
+        Network.playToServer(SpeakerGrilleC2SPacket.TYPE, SpeakerGrilleC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleSpeakerGrillePacket);
+        Network.playToServer(QueueOpC2SPacket.TYPE, QueueOpC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleQueueOpPacket);
+        Network.playToServer(SpeakerDelayC2SPacket.TYPE, SpeakerDelayC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleSpeakerDelayPacket);
+        Network.playToServer(SpeakerVolumeC2SPacket.TYPE, SpeakerVolumeC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleSpeakerVolumePacket);
+        Network.playToServer(MediaBrowseRequestC2SPacket.TYPE, MediaBrowseRequestC2SPacket.STREAM_CODEC,
+                HandlerThread.MAIN, NetworkHandler::handleMediaBrowseRequest);
+        Network.playToServer(ScreenFitModeC2SPacket.TYPE, ScreenFitModeC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleScreenFitModePacket);
+        Network.playToServer(SubtitleChoiceC2SPacket.TYPE, SubtitleChoiceC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleSubtitleChoicePacket);
+        Network.playToServer(VideoWatchC2SPacket.TYPE, VideoWatchC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleVideoWatchPacket);
+        Network.playToServer(DisplayUnlinkC2SPacket.TYPE, DisplayUnlinkC2SPacket.STREAM_CODEC, HandlerThread.MAIN,
+                NetworkHandler::handleDisplayUnlinkPacket);
     }
 
-    @org.jetbrains.annotations.Nullable
+    @Nullable
     private static SpeakerBlockEntity editableSpeaker(ServerPlayer player, BlockPos pos) {
-        if (player.distanceToSqr(pos.getX(), pos.getY(), pos.getZ()) >= 96 * 96) return null;
+        if (!IAudioReceiver.withinControlRange(player, pos)) return null;
         ServerLevel level = Players.level(player);
-        if (!(com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, pos)
+        if (!(WorldAccess.blockEntityIfLoaded(level, pos)
                 instanceof SpeakerBlockEntity speaker)) {
             return null;
         }
-        if (!com.nachtraben.soundstage.block.speaker.AbstractSpeakerBlock.canEdit(level, player, speaker)) {
-            com.nachtraben.soundstage.util.PlayerMessage.actionBar(player,
-                    net.minecraft.network.chat.Component.literal("Receiver is locked!"));
+        if (!AbstractSpeakerBlock.canEdit(level, player, speaker)) {
+            PlayerMessage.actionBar(player,
+                    Component.literal("Receiver is locked!"));
             return null;
         }
         return speaker;
@@ -128,10 +170,10 @@ public class NetworkHandler {
             if (player == null) return;
             if (editableSpeaker(player, packet.pos) == null) return;
             ServerLevel level = Players.level(player);
-            net.minecraft.world.level.block.state.BlockState state = level.getBlockState(packet.pos);
-            if (state.getBlock() instanceof com.nachtraben.soundstage.block.speaker.AbstractSpeakerBlock) {
+            BlockState state = level.getBlockState(packet.pos);
+            if (state.getBlock() instanceof AbstractSpeakerBlock) {
                 level.setBlock(packet.pos, state.setValue(
-                        com.nachtraben.soundstage.block.speaker.AbstractSpeakerBlock.GRILLE, packet.grille), 3);
+                        AbstractSpeakerBlock.GRILLE, packet.grille), 3);
             }
         });
     }
@@ -164,8 +206,9 @@ public class NetworkHandler {
             ServerPlayer player = context.player();
             if (player != null) {
                 if (packet.action == SpeakerControlC2SPacket.Action.SHARE_STOP
-                        || player.distanceToSqr(packet.pos.getX(), packet.pos.getY(), packet.pos.getZ()) < 96 * 96) {
-                    AudioManager.get().handleControl(packet.pos, packet.action, packet.stringData, packet.intData, packet.longData, player);
+                        || IAudioReceiver.withinControlRange(player, packet.pos)) {
+                    AudioManager.get().handleControl(packet.pos, packet.action, packet.stringData, packet.intData,
+                            packet.longData, player);
                 }
             }
         });
@@ -198,17 +241,17 @@ public class NetworkHandler {
         context.queue(() -> {
             ServerPlayer player = context.player();
             if (player == null) return;
-            if (player.distanceToSqr(packet.pos.getX(), packet.pos.getY(), packet.pos.getZ()) >= 96 * 96) return;
-            if (!com.nachtraben.soundstage.config.SoundstageConfig.enableMediaFolder()) return;
+            if (!IAudioReceiver.withinControlRange(player, packet.pos)) return;
+            if (!SoundstageConfig.enableMediaFolder()) return;
             ServerLevel level = Players.level(player);
-            BlockEntity be = com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, packet.pos);
-            if (!(be instanceof com.nachtraben.soundstage.block.IAudioReceiver receiver)) return;
+            BlockEntity be = WorldAccess.blockEntityIfLoaded(level, packet.pos);
+            if (!(be instanceof IAudioReceiver receiver)) return;
             if (!receiver.mayControl(player)) {
-                com.nachtraben.soundstage.util.PlayerMessage.actionBar(player,
-                        net.minecraft.network.chat.Component.literal("Receiver is locked!"));
+                PlayerMessage.actionBar(player,
+                        Component.literal("Receiver is locked!"));
                 return;
             }
-            com.nachtraben.soundstage.audio.media.MediaBrowseRequests.handle(level, player, packet.pos);
+            MediaBrowseRequests.handle(level, player, packet.pos);
         });
     }
 
@@ -216,38 +259,36 @@ public class NetworkHandler {
         context.queue(() -> {
             ServerPlayer player = context.player();
             if (player == null) return;
-            if (player.distanceToSqr(packet.pos.getX(), packet.pos.getY(), packet.pos.getZ()) >= 96 * 96) return;
+            if (!IAudioReceiver.withinControlRange(player, packet.pos)) return;
 
             ServerLevel level = Players.level(player);
-            if (!(com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, packet.pos)
-                    instanceof com.nachtraben.soundstage.block.ScreenBlockEntity screen)) {
+            if (!(WorldAccess.blockEntityIfLoaded(level, packet.pos)
+                    instanceof ScreenBlockEntity screen)) {
                 return;
             }
-            com.nachtraben.soundstage.block.ScreenBlockEntity.FitMode[] modes =
-                    com.nachtraben.soundstage.block.ScreenBlockEntity.FitMode.values();
+            ScreenBlockEntity.FitMode[] modes =
+                    ScreenBlockEntity.FitMode.values();
             if (packet.fitMode < 0 || packet.fitMode >= modes.length) return;
-            com.nachtraben.soundstage.block.ScreenBlockEntity.FitMode mode = modes[packet.fitMode];
+            ScreenBlockEntity.FitMode mode = modes[packet.fitMode];
 
             BlockPos receiverPos = screen.getReceiverPos();
             if (receiverPos != null
-                    && com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, receiverPos)
-                            instanceof com.nachtraben.soundstage.block.IAudioReceiver receiver
+                    && WorldAccess.blockEntityIfLoaded(level, receiverPos)
+                            instanceof IAudioReceiver receiver
                     && !receiver.mayControl(player)) {
-                com.nachtraben.soundstage.util.PlayerMessage.actionBar(player,
-                        net.minecraft.network.chat.Component.literal("This display's receiver is locked!"));
+                PlayerMessage.actionBar(player,
+                        Component.literal("This display's receiver is locked!"));
                 return;
             }
 
-            net.minecraft.core.Direction facing = screen.getBlockState()
-                    .getValue(com.nachtraben.soundstage.block.ScreenBlock.FACING);
-            com.nachtraben.soundstage.core.video.DisplayLayout layout =
-                    com.nachtraben.soundstage.block.ScreenBlockEntity.findDisplay(level, packet.pos, facing);
-            java.util.List<BlockPos> members = com.nachtraben.soundstage.RigStaging.fault("fit-not-applied")
-                    ? java.util.List.of(packet.pos)
-                    : com.nachtraben.soundstage.block.ScreenBlockEntity.memberPositions(packet.pos, facing, layout);
+            Direction facing = screen.getBlockState()
+                    .getValue(ScreenBlock.FACING);
+            DisplayLayout layout =
+                    ScreenBlockEntity.findDisplay(level, packet.pos, facing);
+            List<BlockPos> members = ScreenBlockEntity.memberPositions(packet.pos, facing, layout);
             for (BlockPos memberPos : members) {
-                if (com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, memberPos)
-                        instanceof com.nachtraben.soundstage.block.ScreenBlockEntity member) {
+                if (WorldAccess.blockEntityIfLoaded(level, memberPos)
+                        instanceof ScreenBlockEntity member) {
                     member.setFitMode(mode);
                 }
             }
@@ -258,29 +299,46 @@ public class NetworkHandler {
         context.queue(() -> {
             ServerPlayer player = context.player();
             if (player == null) return;
-            if (player.distanceToSqr(packet.pos().getX(), packet.pos().getY(), packet.pos().getZ()) >= 96 * 96) return;
+            if (!IAudioReceiver.withinControlRange(player, packet.pos())) return;
+            if (!SubtitleChoiceThrottle.tryAcquire(player.getUUID(), System.currentTimeMillis())) return;
             ServerLevel level = Players.level(player);
-            Object at = com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, packet.pos());
-            BlockPos receiverPos = at instanceof com.nachtraben.soundstage.block.ScreenBlockEntity screen
+            Object at = WorldAccess.blockEntityIfLoaded(level, packet.pos());
+            BlockPos receiverPos = at instanceof ScreenBlockEntity screen
                     ? screen.getReceiverPos()
-                    : at instanceof com.nachtraben.soundstage.block.IAudioReceiver ? packet.pos() : null;
+                    : at instanceof IAudioReceiver ? packet.pos() : null;
             if (receiverPos == null) return;
-            if (!(com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, receiverPos)
-                    instanceof com.nachtraben.soundstage.block.IAudioReceiver receiver)) {
+            if (!(WorldAccess.blockEntityIfLoaded(level, receiverPos)
+                    instanceof IAudioReceiver receiver)) {
                 return;
             }
             if (!receiver.mayControl(player)) {
-                com.nachtraben.soundstage.util.PlayerMessage.actionBar(player,
-                        net.minecraft.network.chat.Component.literal("This display's receiver is locked!"));
+                PlayerMessage.actionBar(player,
+                        Component.literal("This display's receiver is locked!"));
                 return;
             }
-            com.nachtraben.soundstage.audio.TrackScheduler scheduler =
-                    com.nachtraben.soundstage.audio.AudioManagerState.scheduler(receiverPos, level);
-            com.nachtraben.soundstage.audio.video.VideoRelay relay = scheduler == null ? null : scheduler.videoRelay();
+            TrackScheduler scheduler =
+                    AudioManagerState.scheduler(receiverPos, level);
+            VideoRelay relay = scheduler == null ? null : scheduler.videoRelay();
             if (relay == null || !relay.chooseSubtitles(packet.choice())) {
-                com.nachtraben.soundstage.util.PlayerMessage.actionBar(player,
-                        net.minecraft.network.chat.Component.literal("Nothing playing has subtitles to choose."));
+                PlayerMessage.actionBar(player,
+                        Component.literal("Nothing playing has subtitles to choose."));
             }
+        });
+    }
+
+    private static void handleVideoWatchPacket(VideoWatchC2SPacket packet, ServerPayloadContext context) {
+        context.queue(() -> {
+            ServerPlayer player = context.player();
+            if (player == null) return;
+            ServerLevel level = Players.level(player);
+            if (!(WorldAccess.blockEntityIfLoaded(level, packet.receiverPos())
+                    instanceof ReceiverBlockEntity)) {
+                return;
+            }
+            TrackScheduler scheduler =
+                    AudioManagerState.scheduler(packet.receiverPos(), level);
+            VideoRelay relay = scheduler == null ? null : scheduler.videoRelay();
+            if (relay != null) relay.watch(player, packet.watching());
         });
     }
 
@@ -288,13 +346,13 @@ public class NetworkHandler {
         context.queue(() -> {
             ServerPlayer player = context.player();
             if (player == null) return;
-            if (player.distanceToSqr(packet.pos.getX(), packet.pos.getY(), packet.pos.getZ()) >= 96 * 96) return;
+            if (!IAudioReceiver.withinControlRange(player, packet.pos)) return;
             ServerLevel level = Players.level(player);
-            if (!(com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, packet.pos)
-                    instanceof com.nachtraben.soundstage.block.ScreenBlockEntity screen)) {
+            if (!(WorldAccess.blockEntityIfLoaded(level, packet.pos)
+                    instanceof ScreenBlockEntity screen)) {
                 return;
             }
-            com.nachtraben.soundstage.item.SpeakerLinkItem.unlinkDisplay(level, player, packet.pos, screen);
+            SpeakerLinkItem.unlinkDisplay(level, player, packet.pos, screen);
         });
     }
 
@@ -302,18 +360,18 @@ public class NetworkHandler {
         context.queue(() -> {
             ServerPlayer player = context.player();
             if (player == null) return;
-            if (player.distanceToSqr(packet.pos.getX(), packet.pos.getY(), packet.pos.getZ()) >= 96 * 96) return;
+            if (!IAudioReceiver.withinControlRange(player, packet.pos)) return;
 
             ServerLevel level = Players.level(player);
-            BlockEntity be = com.nachtraben.soundstage.util.WorldAccess.blockEntityIfLoaded(level, packet.pos);
-            if (!(be instanceof com.nachtraben.soundstage.block.IAudioReceiver receiver)) return;
+            BlockEntity be = WorldAccess.blockEntityIfLoaded(level, packet.pos);
+            if (!(be instanceof IAudioReceiver receiver)) return;
             if (!receiver.mayControl(player)) {
-                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("This receiver is locked by the owner."));
+                player.sendSystemMessage(Component.literal("This receiver is locked by the owner."));
                 return;
             }
             AudioManager.noteController(receiver, player);
 
-            com.nachtraben.soundstage.audio.TrackScheduler scheduler = AudioManager.get().getScheduler(packet.pos, level);
+            TrackScheduler scheduler = AudioManager.get().getScheduler(packet.pos, level);
             if (scheduler == null) return;
 
             switch (packet.action) {
@@ -331,29 +389,30 @@ public class NetworkHandler {
         context.queue(() -> {
             ServerPlayer player = context.player();
             if (player != null) {
-                if (player.distanceToSqr(packet.receiverPos.getX(), packet.receiverPos.getY(), packet.receiverPos.getZ()) < 96 * 96) {
+                if (IAudioReceiver.withinControlRange(player, packet.receiverPos)) {
                     BlockEntity be = Players.level(player).getBlockEntity(packet.receiverPos);
-                    if (be instanceof com.nachtraben.soundstage.block.ReceiverBlockEntity receiver) {
+                    if (be instanceof ReceiverBlockEntity receiver) {
                         if (!receiver.mayControl(player)) {
-                            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("This receiver is locked by the owner."));
+                            player.sendSystemMessage(Component.literal("This receiver is locked by the owner."));
                             return;
                         }
-                        
+
                         if (!receiver.getSpeakers().contains(packet.speakerPos)) {
                             return;
                         }
-                        BlockEntity speakerBe = com.nachtraben.soundstage.util.WorldAccess
+                        BlockEntity speakerBe = WorldAccess
                                 .blockEntityIfLoaded(Players.level(player), packet.speakerPos);
-                        if (speakerBe instanceof com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity speaker) {
+                        if (speakerBe instanceof SpeakerBlockEntity speaker) {
                             try {
-                                com.nachtraben.soundstage.core.ChannelMode newMode = com.nachtraben.soundstage.core.ChannelMode.valueOf(packet.channelMode);
-                                net.minecraft.world.level.block.Block block = speakerBe.getBlockState().getBlock();
-                                boolean isValid = block instanceof com.nachtraben.soundstage.block.speaker.AbstractSpeakerBlock asb
-                                        && java.util.Arrays.asList(asb.getValidModes()).contains(newMode);
-                                
+                                ChannelMode newMode = ChannelMode.valueOf(packet.channelMode);
+                                Block block = speakerBe.getBlockState().getBlock();
+                                boolean isValid = block instanceof AbstractSpeakerBlock asb
+                                        && Arrays.asList(asb.getValidModes()).contains(newMode);
+
                                 if (isValid) {
                                     speaker.setChannelMode(newMode);
-                                    Players.level(player).sendBlockUpdated(packet.speakerPos, speaker.getBlockState(), speaker.getBlockState(), 3);
+                                    Players.level(player).sendBlockUpdated(packet.speakerPos, speaker.getBlockState(),
+                                            speaker.getBlockState(), 3);
                                 }
                             } catch (Exception ignored) {}
                         }
@@ -363,8 +422,8 @@ public class NetworkHandler {
         });
     }
 
-    public static void sendToTracking(ServerLevel level, BlockPos pos, java.util.List<BlockPos> targets, AudioPacket packet) {
-        java.util.List<BlockPos> emitters = new java.util.ArrayList<>();
+    public static void sendToTracking(ServerLevel level, BlockPos pos, List<BlockPos> targets, AudioPacket packet) {
+        List<BlockPos> emitters = new ArrayList<>();
         emitters.add(pos);
         if (targets != null) {
             emitters.addAll(targets);
@@ -376,7 +435,7 @@ public class NetworkHandler {
     }
 
     public static void sendMetadataToTracking(ServerLevel level, BlockPos pos, SpeakerMetadataS2CPacket packet) {
-        for (ServerPlayer player : com.nachtraben.soundstage.audio.MetadataViewers.of(level, pos)) {
+        for (ServerPlayer player : MetadataViewers.of(level, pos)) {
             Network.sendToPlayer(player, packet);
         }
     }

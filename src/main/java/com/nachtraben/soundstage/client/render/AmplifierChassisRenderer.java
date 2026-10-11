@@ -3,6 +3,7 @@ package com.nachtraben.soundstage.client.render;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.util.Mth;
+import org.joml.Vector3f;
 
 final class AmplifierChassisRenderer {
     private AmplifierChassisRenderer() {}
@@ -81,7 +82,8 @@ final class AmplifierChassisRenderer {
 
     static void glass(PoseStack.Pose pose, VertexConsumer c, int light, int overlay) {
         float[] radii = {GLASS_RADIUS, GLASS_RADIUS, GLASS_SHOULDER_RADIUS, GLASS_SHOULDER_RADIUS * 0.75f, 0.12f, 0f};
-        float[] heights = {GLASS_BOTTOM, GLASS_BODY_TOP, GLASS_SHOULDER_TOP, GLASS_CROWN - 0.12f, GLASS_CROWN, GLASS_CROWN + 0.05f};
+        float[] heights = {GLASS_BOTTOM, GLASS_BODY_TOP, GLASS_SHOULDER_TOP, GLASS_CROWN - 0.12f, GLASS_CROWN,
+                GLASS_CROWN + 0.05f};
         for (float cx : TUBE_CENTERS_X) {
             profile(pose, c, cx, radii, heights, 0f, 255, 255, 255, 255, light, overlay);
         }
@@ -104,7 +106,7 @@ final class AmplifierChassisRenderer {
     private static final float[] SEGMENT_NX = new float[PROFILE_SEGMENTS];
     private static final float[] SEGMENT_NY = new float[PROFILE_SEGMENTS];
     private static final float[] SEGMENT_NZ = new float[PROFILE_SEGMENTS];
-    private static final org.joml.Vector3f NORMAL_SCRATCH = new org.joml.Vector3f();
+    private static final Vector3f NORMAL_SCRATCH = new Vector3f();
 
     private static void profile(PoseStack.Pose pose, VertexConsumer c, float cx, float[] radii, float[] heights,
                                 float inset, int r, int g, int b, int a, int light, int overlay, boolean inward) {
@@ -133,10 +135,14 @@ final class AmplifierChassisRenderer {
                 u0 -= Mth.floor(u0);
                 float u1 = u0 + 4f / segments;
                 float nx = SEGMENT_NX[i], ny = SEGMENT_NY[i], nz = SEGMENT_NZ[i];
-                vertex(c, pose, x + Mth.cos(a0) * r0, y0, z + Mth.sin(a0) * r0, u0, v0, r, g, b, a, nx, ny, nz, light, overlay);
-                vertex(c, pose, x + Mth.cos(a0) * r1, y1, z + Mth.sin(a0) * r1, u0, v1, r, g, b, a, nx, ny, nz, light, overlay);
-                vertex(c, pose, x + Mth.cos(a1) * r1, y1, z + Mth.sin(a1) * r1, u1, v1, r, g, b, a, nx, ny, nz, light, overlay);
-                vertex(c, pose, x + Mth.cos(a1) * r0, y0, z + Mth.sin(a1) * r0, u1, v0, r, g, b, a, nx, ny, nz, light, overlay);
+                vertex(c, pose, x + Mth.cos(a0) * r0, y0, z + Mth.sin(a0) * r0, u0, v0, r, g, b, a, nx, ny, nz,
+                        light, overlay);
+                vertex(c, pose, x + Mth.cos(a0) * r1, y1, z + Mth.sin(a0) * r1, u0, v1, r, g, b, a, nx, ny, nz,
+                        light, overlay);
+                vertex(c, pose, x + Mth.cos(a1) * r1, y1, z + Mth.sin(a1) * r1, u1, v1, r, g, b, a, nx, ny, nz,
+                        light, overlay);
+                vertex(c, pose, x + Mth.cos(a1) * r0, y0, z + Mth.sin(a1) * r0, u1, v0, r, g, b, a, nx, ny, nz,
+                        light, overlay);
             }
         }
     }
@@ -184,7 +190,8 @@ final class AmplifierChassisRenderer {
         }
     }
 
-    private static void post(PoseStack.Pose pose, VertexConsumer c, float px, float py, int rgb, int light, int overlay) {
+    private static void post(PoseStack.Pose pose, VertexConsumer c, float px, float py, int rgb, int light,
+                             int overlay) {
         float x = at(px), y = at(py), plate = BODY_BACK + 0.2f;
         axialCylinder(pose, c, x, y, 0.50f, plate, plate + 0.3f, POST_NUT_RGB, 6, true, light, overlay);
         axialCylinder(pose, c, x, y, 0.36f, plate + 0.3f, plate + 1.1f, rgb, 16, false, light, overlay);

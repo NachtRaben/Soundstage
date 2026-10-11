@@ -2,6 +2,8 @@ package com.nachtraben.soundstage.core;
 
 import dev.armadeus.armalib.lavaplayer.shadow.org.apache.http.conn.DnsResolver;
 import dev.armadeus.armalib.lavaplayer.shadow.org.apache.http.impl.conn.SystemDefaultDnsResolver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -14,7 +16,7 @@ import java.util.function.Predicate;
 
 public final class ScreenedDnsResolver implements DnsResolver {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     private static final Set<String> WARNED = ConcurrentHashMap.newKeySet();
     private static final int MAX_WARNED = 256;
@@ -55,8 +57,8 @@ public final class ScreenedDnsResolver implements DnsResolver {
         if (!kept.isEmpty()) return kept.toArray(new InetAddress[0]);
         if (platform == null) {
             throw new PrivateAddressRefusedException(
-                    host + " resolves only to non-public addresses, which Soundstage fetches from only for an operator, "
-                            + "and only with allowPrivateNetworkHosts=true.", false);
+                    host + " resolves only to non-public addresses, which Soundstage fetches from only for an "
+                            + "operator, and only with allowPrivateNetworkHosts=true.", false);
         }
         String addresses = Arrays.toString(Arrays.stream(resolved).map(InetAddress::getHostAddress).toArray());
         if (WARNED.size() < MAX_WARNED && WARNED.add(host)) {

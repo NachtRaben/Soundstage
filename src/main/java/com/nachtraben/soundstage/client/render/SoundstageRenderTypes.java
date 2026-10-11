@@ -2,8 +2,13 @@ package com.nachtraben.soundstage.client.render;
 
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.Util;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 //? if >=1.21.11 {
 /*import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -34,8 +39,8 @@ public final class SoundstageRenderTypes extends RenderType {
     }
     //?}
 
-    private static final java.util.function.Function<ResourceLocation, RenderType> GLASS =
-            net.minecraft.Util.memoize(SoundstageRenderTypes::createGlass);
+    private static final Function<ResourceLocation, RenderType> GLASS =
+            Util.memoize(SoundstageRenderTypes::createGlass);
 
     public static RenderType glass(ResourceLocation texture) {
         return GLASS.apply(texture);
@@ -56,7 +61,7 @@ public final class SoundstageRenderTypes extends RenderType {
                 ^///?}
                 .createRenderSetup());
         *///?} else {
-        
+
         return create("soundstage_glass",
                 DefaultVertexFormat.NEW_ENTITY,
                 VertexFormat.Mode.QUADS,
@@ -100,33 +105,37 @@ public final class SoundstageRenderTypes extends RenderType {
             //?}
             .build();
 
-    private static final RenderPipeline ADDITIVE_EYES_PIPELINE = RenderPipeline.builder(RenderPipelines.MATRICES_FOG_SNIPPET)
-            .withLocation(ResourceLocation.fromNamespaceAndPath("soundstage", "pipeline/additive_eyes"))
-            .withVertexShader("core/entity")
-            .withFragmentShader("core/entity")
-            .withShaderDefine("EMISSIVE")
-            .withShaderDefine("NO_OVERLAY")
-            .withShaderDefine("NO_CARDINAL_LIGHTING")
-            //? if >=26.2 {
-            /^.withBindGroupLayout(net.minecraft.client.renderer.BindGroupLayouts.SAMPLER0)
-            .withColorTargetState(new com.mojang.blaze3d.pipeline.ColorTargetState(BlendFunction.ADDITIVE))
-            .withDepthStencilState(new com.mojang.blaze3d.pipeline.DepthStencilState(
-                    com.mojang.blaze3d.platform.CompareOp.GREATER_THAN_OR_EQUAL, false))
-            .withVertexBinding(0, DefaultVertexFormat.NEW_ENTITY)
-            .withPrimitiveTopology(com.mojang.blaze3d.PrimitiveTopology.QUADS)
-            ^///?} else if >=26.1 {
-            /^.withSampler("Sampler0")
-            .withColorTargetState(new com.mojang.blaze3d.pipeline.ColorTargetState(BlendFunction.ADDITIVE))
-            .withDepthStencilState(new com.mojang.blaze3d.pipeline.DepthStencilState(
-                    com.mojang.blaze3d.platform.CompareOp.LESS_THAN_OR_EQUAL, false))
-            .withVertexFormat(DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.QUADS)
-            ^///?} else {
-            .withSampler("Sampler0")
-            .withBlend(BlendFunction.ADDITIVE)
-            .withDepthWrite(false)
-            .withVertexFormat(DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.QUADS)
-            //?}
-            .build();
+    private static final RenderPipeline ADDITIVE_EYES_PIPELINE = additiveEyesPipeline("pipeline/additive_eyes");
+
+    private static RenderPipeline additiveEyesPipeline(String path) {
+        return RenderPipeline.builder(RenderPipelines.MATRICES_FOG_SNIPPET)
+                .withLocation(ResourceLocation.fromNamespaceAndPath("soundstage", path))
+                .withVertexShader("core/entity")
+                .withFragmentShader("core/entity")
+                .withShaderDefine("EMISSIVE")
+                .withShaderDefine("NO_OVERLAY")
+                .withShaderDefine("NO_CARDINAL_LIGHTING")
+                //? if >=26.2 {
+                /^.withBindGroupLayout(net.minecraft.client.renderer.BindGroupLayouts.SAMPLER0)
+                .withColorTargetState(new com.mojang.blaze3d.pipeline.ColorTargetState(BlendFunction.ADDITIVE))
+                .withDepthStencilState(new com.mojang.blaze3d.pipeline.DepthStencilState(
+                        com.mojang.blaze3d.platform.CompareOp.GREATER_THAN_OR_EQUAL, false))
+                .withVertexBinding(0, DefaultVertexFormat.NEW_ENTITY)
+                .withPrimitiveTopology(com.mojang.blaze3d.PrimitiveTopology.QUADS)
+                ^///?} else if >=26.1 {
+                /^.withSampler("Sampler0")
+                .withColorTargetState(new com.mojang.blaze3d.pipeline.ColorTargetState(BlendFunction.ADDITIVE))
+                .withDepthStencilState(new com.mojang.blaze3d.pipeline.DepthStencilState(
+                        com.mojang.blaze3d.platform.CompareOp.LESS_THAN_OR_EQUAL, false))
+                .withVertexFormat(DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.QUADS)
+                ^///?} else {
+                .withSampler("Sampler0")
+                .withBlend(BlendFunction.ADDITIVE)
+                .withDepthWrite(false)
+                .withVertexFormat(DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.QUADS)
+                //?}
+                .build();
+    }
 
     //? if >=26.3 {
     /^private static final net.minecraft.client.renderer.oit.OitPipelineSet ADDITIVE_EYES_OIT =
@@ -158,7 +167,6 @@ public final class SoundstageRenderTypes extends RenderType {
     }
 
     public static int submitOrder(RenderType type) {
-        if (com.nachtraben.soundstage.RigStaging.fault("blended-unordered")) return 0;
         RenderPipeline pipeline = type.pipeline();
         boolean pack = IrisCompat.isShaderPackInUse();
         if (pipeline == ADDITIVE_EYES_PIPELINE) return pack ? 2 : 1;
@@ -229,44 +237,51 @@ public final class SoundstageRenderTypes extends RenderType {
     }
     *///?}
 
-    private static final java.util.function.Function<ResourceLocation, RenderType> VIDEO =
-            net.minecraft.Util.memoize(SoundstageRenderTypes::createVideo);
+    //? if >=26.3 {
+    /*public static final RenderPipeline VIDEO_MIP_PIPELINE = videoMipPipeline("core/video_mip_spirv");
+    *///?} else if >=26.2 {
+    /*public static final RenderPipeline VIDEO_MIP_PIPELINE = videoMipPipeline("core/video_mip");
+    *///?}
+
+    //? if >=26.2 {
+    /*private static RenderPipeline videoMipPipeline(String shader) {
+        ResourceLocation source = ResourceLocation.fromNamespaceAndPath("soundstage", shader);
+        return RenderPipeline.builder()
+                .withLocation(ResourceLocation.fromNamespaceAndPath("soundstage", "pipeline/video_mip"))
+                .withVertexShader(source)
+                .withFragmentShader(source)
+                .withBindGroupLayout(net.minecraft.client.renderer.BindGroupLayouts.IN_SAMPLER)
+                .withPrimitiveTopology(com.mojang.blaze3d.PrimitiveTopology.TRIANGLES)
+                .withColorTargetState(com.mojang.blaze3d.pipeline.ColorTargetState.DEFAULT)
+                .build();
+    }
+
+    private static volatile boolean videoMipCompiled;
+
+    public static void videoMipCompiled() {
+        videoMipCompiled = true;
+    }
+
+    public static boolean videoMipReady() {
+        return videoMipCompiled;
+    }
+    *///?}
+
+    private static final Function<ResourceLocation, RenderType> VIDEO =
+            Util.memoize(SoundstageRenderTypes::createVideo);
 
     public static RenderType video(ResourceLocation texture) {
         return VIDEO.apply(texture);
     }
 
-    public enum VideoProgram {
-        BEACON,
-        OVERLAY
-    }
-
-    private static final VideoProgram VIDEO_PROGRAM = videoProgram();
-
-    public static VideoProgram videoProgramInUse() {
-        return VIDEO_PROGRAM;
-    }
-
-    private static VideoProgram videoProgram() {
-        for (String rig : java.util.List.of("soundstage:screen-bars-true", "soundstage:caption-look")) {
-            if (com.nachtraben.soundstage.RigStaging.sessionStages(rig, "overlay-off")) {
-                org.slf4j.LoggerFactory.getLogger("Soundstage").warn("Soundstage: red control — screens draw their "
-                        + "picture with BEACON only, and nothing is redrawn after a shader pack (rig {}, overlay-off)", rig);
-                return VideoProgram.BEACON;
-            }
-        }
-        return VideoProgram.OVERLAY;
-    }
-
     private static RenderType createVideo(ResourceLocation texture) {
-        if (com.nachtraben.soundstage.RigStaging.fault("video-lit")) return createLitVideo(texture);
         //? if >=1.21.11 {
         /*return RenderType.create("soundstage_video", RenderSetup.builder(RenderPipelines.BEACON_BEAM_OPAQUE)
                 .withTexture("Sampler0", texture)
                 .sortOnUpload()
                 .createRenderSetup());
         *///?} else {
-        
+
         return create("soundstage_video",
                 DefaultVertexFormat.BLOCK,
                 VertexFormat.Mode.QUADS,
@@ -276,51 +291,18 @@ public final class SoundstageRenderTypes extends RenderType {
                 RenderType.CompositeState.builder()
                         .setShaderState(RENDERTYPE_BEACON_BEAM_SHADER)
                         .setTextureState(new net.minecraft.client.renderer.RenderStateShard.TextureStateShard(
-                                texture, true, false))
+                                texture, true, true))
                         .setTransparencyState(NO_TRANSPARENCY)
                         .setWriteMaskState(COLOR_DEPTH_WRITE)
                         .createCompositeState(false));
         //?}
     }
 
-    private static RenderType createLitVideo(ResourceLocation texture) {
-        //? if >=1.21.11 {
-        /*return RenderTypes.entitySolid(texture);
-        *///?} else {
-        
-        return create("soundstage_video_lit",
-                DefaultVertexFormat.NEW_ENTITY,
-                VertexFormat.Mode.QUADS,
-                1536,
-                true,
-                false,
-                RenderType.CompositeState.builder()
-                        .setShaderState(RENDERTYPE_ENTITY_SOLID_SHADER)
-                        .setTextureState(new net.minecraft.client.renderer.RenderStateShard.TextureStateShard(
-                                texture, true, false))
-                        .setTransparencyState(NO_TRANSPARENCY)
-                        .setLightmapState(LIGHTMAP)
-                        .setOverlayState(OVERLAY)
-                        .createCompositeState(true));
-        //?}
-    }
-
     //? if >=1.21.11 {
-    /*public static final RenderPipeline SPIDER_PIPELINE = spiderPipeline("pipeline/spider", spiderVertexShader(), true);
-
-    public static final RenderPipeline SPIDER_NO_DEPTH_PIPELINE = com.nachtraben.soundstage.RigStaging.ACTIVE
-            ? spiderPipeline("pipeline/spider_rig_nodepth", spiderVertexShader(), false) : null;
+    /*public static final RenderPipeline SPIDER_PIPELINE =
+            spiderPipeline("pipeline/spider", spiderVertexShader(), true);
 
     private static ResourceLocation spiderVertexShader() {
-        if (com.nachtraben.soundstage.RigStaging.sessionStages("soundstage:woofer-moves", "broken-shader")) {
-            org.slf4j.LoggerFactory.getLogger("Soundstage").warn("Soundstage: red control — the spider pipeline "
-                    + "is built from a vertex stage that does not compile (rig soundstage:woofer-moves)");
-            //? if >=26.3 {
-            /^return ResourceLocation.fromNamespaceAndPath("soundstage", "core/spider_rig_nolayout");
-            ^///?} else {
-            return ResourceLocation.fromNamespaceAndPath("soundstage", "core/spider_rig_broken");
-            //?}
-        }
         //? if >=26.3 {
         /^return ResourceLocation.fromNamespaceAndPath("soundstage", "core/spider_spirv");
         ^///?} else {
@@ -390,11 +372,6 @@ public final class SoundstageRenderTypes extends RenderType {
     }
 
     public static ResourceLocation spiderShaderId() {
-        if (com.nachtraben.soundstage.RigStaging.sessionStages("soundstage:woofer-moves", "broken-shader")) {
-            org.slf4j.LoggerFactory.getLogger("Soundstage").warn("Soundstage: red control — the spider shader "
-                    + "is loaded from a vertex stage that does not compile (rig soundstage:woofer-moves)");
-            return ResourceLocation.fromNamespaceAndPath("soundstage", "soundstage_spider_rig_broken");
-        }
         //? if <1.21 {
         /*return ResourceLocation.fromNamespaceAndPath("soundstage", "soundstage_spider_1201");
         *///?} else {
@@ -403,8 +380,8 @@ public final class SoundstageRenderTypes extends RenderType {
     }
     //?}
 
-    private static final java.util.function.Function<ResourceLocation, RenderType> SPIDER =
-            net.minecraft.Util.memoize(SoundstageRenderTypes::createSpider);
+    private static final Function<ResourceLocation, RenderType> SPIDER =
+            Util.memoize(SoundstageRenderTypes::createSpider);
 
     public static RenderType spider(ResourceLocation texture) {
         return SPIDER.apply(texture);
@@ -415,8 +392,8 @@ public final class SoundstageRenderTypes extends RenderType {
         return plain != null ? plain : type;
     }
 
-    private static final java.util.Map<RenderType, RenderType> UNDISPLACED =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<RenderType, RenderType> UNDISPLACED =
+            new ConcurrentHashMap<>();
 
     private static RenderType createSpider(ResourceLocation texture) {
         //? if >=1.21.11 {
@@ -427,7 +404,7 @@ public final class SoundstageRenderTypes extends RenderType {
                 .setOutline(RenderSetup.OutlineProperty.AFFECTS_OUTLINE)
                 .createRenderSetup());
         *///?} else {
-        
+
         RenderType type = create("soundstage_spider",
                 DefaultVertexFormat.NEW_ENTITY,
                 VertexFormat.Mode.QUADS,
@@ -445,46 +422,7 @@ public final class SoundstageRenderTypes extends RenderType {
                         .createCompositeState(true));
         //?}
         UNDISPLACED.put(type, cutoutNoCull(texture));
-        if (com.nachtraben.soundstage.RigStaging.ACTIVE) NO_DEPTH.put(type, createSpiderWithoutDepth(texture));
         return type;
-    }
-
-    public static RenderType drawnAs(RenderType type) {
-        if (!com.nachtraben.soundstage.RigStaging.fault("spider-no-depth")) return type;
-        RenderType twin = NO_DEPTH.get(type);
-        return twin != null ? twin : type;
-    }
-
-    private static final java.util.Map<RenderType, RenderType> NO_DEPTH =
-            new java.util.concurrent.ConcurrentHashMap<>();
-
-    private static RenderType createSpiderWithoutDepth(ResourceLocation texture) {
-        //? if >=1.21.11 {
-        /*return RenderType.create("soundstage_spider_rig_nodepth", RenderSetup.builder(SPIDER_NO_DEPTH_PIPELINE)
-                .withTexture("Sampler0", texture)
-                .useLightmap()
-                .affectsCrumbling()
-                .setOutline(RenderSetup.OutlineProperty.AFFECTS_OUTLINE)
-                .createRenderSetup());
-        *///?} else {
-        return create("soundstage_spider_rig_nodepth",
-                DefaultVertexFormat.NEW_ENTITY,
-                VertexFormat.Mode.QUADS,
-                1536,
-                true,
-                false,
-                RenderType.CompositeState.builder()
-                        .setShaderState(new net.minecraft.client.renderer.RenderStateShard.ShaderStateShard(
-                                SoundstageRenderTypes::spiderShader))
-                        .setTextureState(glassTextureState(texture))
-                        .setTransparencyState(NO_TRANSPARENCY)
-                        .setCullState(NO_CULL)
-                        .setLightmapState(LIGHTMAP)
-                        .setOverlayState(OVERLAY)
-                        .setDepthTestState(NO_DEPTH_TEST)
-                        .setWriteMaskState(COLOR_WRITE)
-                        .createCompositeState(true));
-        //?}
     }
 
     public static RenderType eyes(ResourceLocation texture) {

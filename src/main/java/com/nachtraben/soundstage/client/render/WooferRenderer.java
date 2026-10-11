@@ -6,6 +6,9 @@ import com.nachtraben.soundstage.core.WooferKinematics;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.util.Mth;
+import org.joml.Vector3f;
+
+import java.util.Arrays;
 
 final class WooferRenderer {
     private WooferRenderer() {}
@@ -200,7 +203,7 @@ final class WooferRenderer {
         weights[0] = 0f;
         weights[1] = 0.33f;
         weights[2] = 0.67f;
-        java.util.Arrays.fill(weights, RIGID_PROFILE_START, weights.length, 1f);
+        Arrays.fill(weights, RIGID_PROFILE_START, weights.length, 1f);
         return weights;
     }
 
@@ -335,10 +338,10 @@ final class WooferRenderer {
         float[] depths = wooferProfileDepths(woofer, WooferKinematics.DIAPHRAGM_THICKNESS);
         int last = sealed ? 1 : radii.length - 1;
         emitRoundedSurface(pose, consumer,
-                java.util.Arrays.copyOfRange(radii, 0, last + 1),
-                java.util.Arrays.copyOfRange(depths, 0, last + 1),
+                Arrays.copyOfRange(radii, 0, last + 1),
+                Arrays.copyOfRange(depths, 0, last + 1),
                 0x12161A, 255, false, 0, light, overlay,
-                weights == null ? null : java.util.Arrays.copyOfRange(weights, 0, last + 1));
+                weights == null ? null : Arrays.copyOfRange(weights, 0, last + 1));
     }
 
     static float[] wooferProfileRadii() {
@@ -383,7 +386,7 @@ final class WooferRenderer {
         for (int i = 0; i <= segments; i++) {
             outline[i] = Mesh.unitRoundedPoint((float) (Math.PI * 2.0 * i / segments));
         }
-        org.joml.Vector3f normal = new org.joml.Vector3f();
+        Vector3f normal = new Vector3f();
         for (int ring = 0; ring < radii.length - 1; ring++) {
             float r0 = radii[ring], r1 = radii[ring + 1];
             float t0 = textureRadius(r0);

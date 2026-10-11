@@ -1,5 +1,6 @@
 package com.nachtraben.soundstage.block.speaker;
 
+import com.nachtraben.soundstage.audio.AudioManagerState;
 import com.nachtraben.soundstage.audio.TrackScheduler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -58,7 +59,7 @@ public final class SpeakerDance {
     private static boolean isProducingAudio(ServerLevel level, SpeakerBlockEntity speaker) {
         BlockPos receiverPos = speaker.getReceiverPos();
         if (receiverPos == null) return false;
-        TrackScheduler scheduler = com.nachtraben.soundstage.audio.AudioManagerState.scheduler(receiverPos, level);
+        TrackScheduler scheduler = AudioManagerState.scheduler(receiverPos, level);
         return scheduler != null && scheduler.isActivelyPlaying();
     }
 }

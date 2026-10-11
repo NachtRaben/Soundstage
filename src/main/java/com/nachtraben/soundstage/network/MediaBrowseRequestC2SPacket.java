@@ -9,7 +9,8 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 public class MediaBrowseRequestC2SPacket implements CustomPacketPayload {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "media_browse_request_c2s");
+    public static final ResourceLocation ID =
+            ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "media_browse_request_c2s");
     public static final Type<MediaBrowseRequestC2SPacket> TYPE = new Type<>(ID);
     public static final StreamCodec<FriendlyByteBuf, MediaBrowseRequestC2SPacket> STREAM_CODEC = StreamCodec.ofMember(
             MediaBrowseRequestC2SPacket::write, MediaBrowseRequestC2SPacket::new

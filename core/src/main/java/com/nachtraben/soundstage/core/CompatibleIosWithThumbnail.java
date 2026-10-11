@@ -1,5 +1,6 @@
 package com.nachtraben.soundstage.core;
 
+import com.nachtraben.soundstage.core.video.YoutubeAudioTracks;
 import com.nachtraben.soundstage.core.video.YoutubeCaptions;
 import com.sedmelluq.discord.lavaplayer.tools.DataFormatTools;
 import com.sedmelluq.discord.lavaplayer.tools.JsonBrowser;
@@ -17,8 +18,12 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
-final class CompatibleIosWithThumbnail extends IosWithThumbnail implements YoutubeCaptions.Source {
+final class CompatibleIosWithThumbnail extends IosWithThumbnail implements YoutubeCaptions.Source,
+        YoutubeAudioTracks.Source {
 
     private static final int REMEMBERED_VIDEOS = 64;
 
@@ -30,6 +35,33 @@ final class CompatibleIosWithThumbnail extends IosWithThumbnail implements Youtu
                 }
             });
 
+    private final Map<String, List<YoutubeAudioTracks.Track>> audioTracks =
+            Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(
+                        Map.Entry<String, List<YoutubeAudioTracks.Track>> eldest) {
+                    return size() > REMEMBERED_VIDEOS;
+                }
+            });
+
+    private final Map<String, List<Consumer<List<YoutubeAudioTracks.Track>>>>
+            watchers = new ConcurrentHashMap<>();
+
+    @Override
+    public List<YoutubeAudioTracks.Track> audioTracksOf(String videoId) {
+        return audioTracks.get(videoId);
+    }
+
+    @Override
+    public AutoCloseable whenSeen(String videoId,
+                                  Consumer<List<YoutubeAudioTracks.Track>> seen) {
+        watchers.computeIfAbsent(videoId, id -> new CopyOnWriteArrayList<>()).add(seen);
+        return () -> watchers.computeIfPresent(videoId, (id, list) -> {
+            list.remove(seen);
+            return list.isEmpty() ? null : list;
+        });
+    }
+
     @Override
     protected JsonBrowser loadTrackInfoFromInnertube(YoutubeAudioSourceManager source, HttpInterface httpInterface,
                                                      String videoId, Client.PlayabilityStatus status,
@@ -37,7 +69,20 @@ final class CompatibleIosWithThumbnail extends IosWithThumbnail implements Youtu
             throws CannotBeLoaded, IOException {
         JsonBrowser response = super.loadTrackInfoFromInnertube(source, httpInterface, videoId, status,
                 validatePlayabilityStatus);
-        if (response != null && videoId != null) captions.put(videoId, YoutubeCaptions.tracksIn(response));
+        if (response != null && videoId != null) {
+            captions.put(videoId, YoutubeCaptions.tracksIn(response));
+            List<YoutubeAudioTracks.Track> tracks =
+                    YoutubeAudioTracks.tracksIn(response);
+            audioTracks.put(videoId, tracks);
+            List<Consumer<List<YoutubeAudioTracks.Track>>> waiting =
+                    watchers.get(videoId);
+            if (waiting != null) {
+                for (Consumer<List<YoutubeAudioTracks.Track>> seen
+                        : waiting) {
+                    seen.accept(tracks);
+                }
+            }
+        }
         return response;
     }
 

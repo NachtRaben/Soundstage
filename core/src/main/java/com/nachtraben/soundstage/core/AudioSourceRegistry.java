@@ -7,17 +7,24 @@ import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.source.soundcloud.SoundCloudAudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.source.twitch.TwitchStreamAudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.source.vimeo.VimeoAudioSourceManager;
+import com.sedmelluq.discord.lavaplayer.tools.io.HttpConfigurable;
+import dev.armadeus.armalib.lavaplayer.shadow.org.apache.http.conn.DnsResolver;
+import dev.armadeus.armalib.lavaplayer.shadow.org.apache.http.impl.conn.SystemDefaultDnsResolver;
 import dev.lavalink.youtube.YoutubeAudioSourceManager;
 import dev.lavalink.youtube.clients.IosWithThumbnail;
 import dev.lavalink.youtube.clients.Tv;
 import dev.lavalink.youtube.clients.Web;
 import dev.lavalink.youtube.clients.skeleton.Client;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 public final class AudioSourceRegistry {
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     private static final String CLIENT_PACKAGE = Tv.class.getPackageName() + ".";
     private static final String CONFIG_CLIENT_PACKAGE =
@@ -48,12 +55,12 @@ public final class AudioSourceRegistry {
 
     @FunctionalInterface
     public interface HttpSourceFactory {
-        ScreenedHttpSource create(boolean admitted, dev.armadeus.armalib.lavaplayer.shadow.org.apache.http.conn.DnsResolver screen);
+        ScreenedHttpSource create(boolean admitted, DnsResolver screen);
     }
 
     public static Result create(AudioSourceSettings settings, List<? extends AudioSourceManager> first,
                                 YoutubeSourceFactory youtubeFactory,
-                                java.util.function.Supplier<? extends TwitchStreamAudioSourceManager> twitchFactory,
+                                Supplier<? extends TwitchStreamAudioSourceManager> twitchFactory,
                                 HttpSourceFactory httpFactory) {
         AudioPlayerManager manager = new DefaultAudioPlayerManager();
         for (AudioSourceManager source : first) {
@@ -87,7 +94,7 @@ public final class AudioSourceRegistry {
 
         if (settings.enableHttp()) {
             manager.registerSourceManager(httpFactory.create(true, new ScreenedDnsResolver(
-                    dev.armadeus.armalib.lavaplayer.shadow.org.apache.http.impl.conn.SystemDefaultDnsResolver.INSTANCE,
+                    SystemDefaultDnsResolver.INSTANCE,
                     address -> settings.allowPrivateNetworkHosts() || UrlPolicy.isPubliclyRoutable(address))));
             manager.registerSourceManager(httpFactory.create(false, ScreenedDnsResolver.publicOnly()));
         }
@@ -97,7 +104,7 @@ public final class AudioSourceRegistry {
 
     private static YoutubeAudioSourceManager registerYoutube(AudioPlayerManager manager, AudioSourceSettings settings,
                                                              YoutubeSourceFactory factory) {
-        String refreshToken = java.util.Objects.requireNonNullElse(settings.oauthRefreshToken(), "");
+        String refreshToken = Objects.requireNonNullElse(settings.oauthRefreshToken(), "");
 
         List<String> requested = settings.youtubeClients();
         if (requested == null || requested.isEmpty()) requested = AudioSourceSettings.DEFAULT_YOUTUBE_CLIENTS;
@@ -120,8 +127,8 @@ public final class AudioSourceRegistry {
             youtube.useOauth2(refreshToken, true);
         }
 
-        String poToken = java.util.Objects.requireNonNullElse(settings.poToken(), "");
-        String visitorData = java.util.Objects.requireNonNullElse(settings.visitorData(), "");
+        String poToken = Objects.requireNonNullElse(settings.poToken(), "");
+        String visitorData = Objects.requireNonNullElse(settings.visitorData(), "");
         if (!poToken.isEmpty() && !visitorData.isEmpty()) {
             Web.setPoTokenAndVisitorData(poToken, visitorData);
         }
@@ -132,9 +139,10 @@ public final class AudioSourceRegistry {
         return youtube;
     }
 
-    static <T extends com.sedmelluq.discord.lavaplayer.source.AudioSourceManager
-            & com.sedmelluq.discord.lavaplayer.tools.io.HttpConfigurable> T publicOnly(T source) {
-        source.configureBuilder(builder -> ScreenedConnections.install(builder, ScreenedDnsResolver.platform(source.getSourceName())));
+    static <T extends AudioSourceManager
+            & HttpConfigurable> T publicOnly(T source) {
+        source.configureBuilder(builder ->
+                ScreenedConnections.install(builder, ScreenedDnsResolver.platform(source.getSourceName())));
         return source;
     }
 

@@ -1,10 +1,12 @@
 package com.nachtraben.soundstage.core.video;
 
 import com.sedmelluq.discord.lavaplayer.natives.aac.AacDecoder;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
+import java.util.ArrayDeque;
 
 public final class SurroundDecoder implements TsDemuxer.Listener, AutoCloseable {
 
@@ -30,7 +32,7 @@ public final class SurroundDecoder implements TsDemuxer.Listener, AutoCloseable 
     private long mainFirstPts;
     private boolean placed;
     private long nextSample;
-    private final java.util.ArrayDeque<Object[]> early = new java.util.ArrayDeque<>();
+    private final ArrayDeque<Object[]> early = new ArrayDeque<>();
     private boolean failed;
 
     public SurroundDecoder(TsDemuxer.Listener delegate, SurroundBuffer buffer, long startMillis) {
@@ -89,7 +91,9 @@ public final class SurroundDecoder implements TsDemuxer.Listener, AutoCloseable 
                 int channels = ((adts[i + 2] & 1) << 2) | ((adts[i + 3] & 0xff) >> 6);
                 int frameLength = ((adts[i + 3] & 3) << 11) | ((adts[i + 4] & 0xff) << 3) | ((adts[i + 5] & 0xff) >> 5);
                 int header = protectionAbsent ? 7 : 9;
-                if (frameLength < header || i + frameLength > adts.length || rateIndex >= ADTS_SAMPLE_RATES.length) break;
+                if (frameLength < header || i + frameLength > adts.length || rateIndex >= ADTS_SAMPLE_RATES.length) {
+                    break;
+                }
                 configure(profile, ADTS_SAMPLE_RATES[rateIndex], channels);
                 decodeFrame(adts, i + header, frameLength - header);
                 i += frameLength;
@@ -97,13 +101,14 @@ public final class SurroundDecoder implements TsDemuxer.Listener, AutoCloseable 
         } catch (RuntimeException e) {
             failed = true;
             buffer.clear();
-            org.slf4j.LoggerFactory.getLogger("Soundstage").warn(
+            LoggerFactory.getLogger("Soundstage").warn(
                     "Soundstage: the 5.1 track could not be decoded ({}); this copy plays stereo.", e.toString());
         }
     }
 
     private void configure(int profile, int rate, int channels) {
-        if (decoder != null && profile == configuredProfile && rate == configuredRate && channels == configuredChannels) {
+        if (decoder != null && profile == configuredProfile && rate == configuredRate
+                && channels == configuredChannels) {
             return;
         }
         if (decoder != null) decoder.close();
@@ -127,7 +132,8 @@ public final class SurroundDecoder implements TsDemuxer.Listener, AutoCloseable 
             AacDecoder.StreamInfo info = decoder.resolveStreamInfo();
             if (info == null) return;
             if (info.channels != SurroundBuffer.CHANNELS || info.sampleRate != SurroundBuffer.SAMPLE_RATE) {
-                throw new IllegalStateException("sidecar is " + info.channels + " channels at " + info.sampleRate + " Hz");
+                throw new IllegalStateException("sidecar is " + info.channels + " channels at "
+                        + info.sampleRate + " Hz");
             }
             output = ByteBuffer.allocateDirect(2 * info.frameSize * info.channels)
                     .order(ByteOrder.nativeOrder()).asShortBuffer();

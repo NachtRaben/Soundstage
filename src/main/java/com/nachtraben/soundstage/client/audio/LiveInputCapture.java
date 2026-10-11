@@ -3,19 +3,22 @@ package com.nachtraben.soundstage.client.audio;
 import com.nachtraben.soundstage.core.OpusCodec;
 import com.nachtraben.soundstage.network.LiveAudioC2SPacket;
 import dev.armadeus.armalib.platform.client.ClientNetwork;
+import net.minecraft.client.Minecraft;
 import org.lwjgl.openal.AL10;
 import org.lwjgl.openal.ALC10;
 import org.lwjgl.openal.ALC11;
 import org.lwjgl.openal.ALUtil;
 import org.lwjgl.openal.EXTDisconnect;
 import org.lwjgl.system.MemoryUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ShortBuffer;
 import java.util.List;
 
 public final class LiveInputCapture {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     private static final long STALL_NANOS = 3_000_000_000L;
 
@@ -29,8 +32,6 @@ public final class LiveInputCapture {
     }
 
     public static List<String> devices() {
-        java.util.function.Function<String, Source> override = LiveInputClient.sourceOverride;
-        if (override != null) return List.of(LiveInputClient.RIG_DEVICE);
         List<String> names = ALUtil.getStringList(0L, ALC11.ALC_CAPTURE_DEVICE_SPECIFIER);
         return names == null ? List.of() : names;
     }
@@ -81,8 +82,7 @@ public final class LiveInputCapture {
         OpusCodec.Encoder encoder = null;
         Source source = null;
         try {
-            java.util.function.Function<String, Source> override = LiveInputClient.sourceOverride;
-            source = override != null ? override.apply(device) : new OpenAlSource(device);
+            source = new OpenAlSource(device);
             long lastFrame = System.nanoTime();
             while (running) {
                 if (source.lost()) {
@@ -128,7 +128,7 @@ public final class LiveInputCapture {
     }
 
     private static void send(byte[] packet) {
-        if (net.minecraft.client.Minecraft.getInstance().getConnection() == null) return;
+        if (Minecraft.getInstance().getConnection() == null) return;
         ClientNetwork.sendToServer(new LiveAudioC2SPacket(packet));
     }
 

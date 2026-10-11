@@ -9,9 +9,9 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.network.codec.StreamCodec;
 import org.jetbrains.annotations.NotNull;
 
-public class SpeakerControlC2SPacket implements CustomPacketPayload
-{
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "speaker_control_c2s");
+public class SpeakerControlC2SPacket implements CustomPacketPayload {
+    public static final ResourceLocation ID =
+            ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "speaker_control_c2s");
     public static final Type<SpeakerControlC2SPacket> TYPE = new Type<>(ID);
     public static final StreamCodec<FriendlyByteBuf, SpeakerControlC2SPacket> STREAM_CODEC = StreamCodec.ofMember(
         SpeakerControlC2SPacket::write, SpeakerControlC2SPacket::new
@@ -37,7 +37,8 @@ public class SpeakerControlC2SPacket implements CustomPacketPayload
         SHARE_START,
         SHARE_STOP,
         TOGGLE_PICTURE,
-        TOGGLE_LEVELLING
+        TOGGLE_LEVELLING,
+        CHOOSE_AUDIO
     }
 
     public final BlockPos pos;

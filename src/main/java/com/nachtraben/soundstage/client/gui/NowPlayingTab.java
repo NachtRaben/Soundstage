@@ -1,15 +1,18 @@
 package com.nachtraben.soundstage.client.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
+import com.nachtraben.soundstage.block.IAudioReceiver;
+import com.nachtraben.soundstage.core.TrackTime;
+import com.nachtraben.soundstage.network.QueueOpC2SPacket;
+import com.nachtraben.soundstage.network.SpeakerControlC2SPacket;
 import dev.armadeus.armalib.ui.ScrollingText;
 import dev.armadeus.armalib.ui.UiButton;
 import dev.armadeus.armalib.ui.UiDraw;
+import dev.armadeus.armalib.ui.UiDropdown;
 import dev.armadeus.armalib.ui.UiGraphics;
 import dev.armadeus.armalib.ui.UiIcon;
 import dev.armadeus.armalib.ui.UiSlider;
 import dev.armadeus.armalib.ui.UiText;
-import com.nachtraben.soundstage.block.IAudioReceiver;
-import com.nachtraben.soundstage.network.QueueOpC2SPacket;
-import com.nachtraben.soundstage.network.SpeakerControlC2SPacket;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
@@ -28,11 +31,13 @@ final class NowPlayingTab extends ReceiverTab {
     private static final int ROW_HEIGHT = 13;
     private static final int ROWS = 4;
     private static final int TIME_WIDTH = 30;
+    private static final int AUDIO_WIDTH = 124, AUDIO_ICON = 10;
 
     private final ScrollingText titleLine = new ScrollingText();
     private final ScrollingText artistLine = new ScrollingText();
     private final ScrollingText hoveredRowLine = new ScrollingText();
     private UiSlider volumeSlider;
+    private UiDropdown<String> audioDropdown;
 
     NowPlayingTab(AudioPlayerScreen screen) {
         super(screen);
@@ -48,14 +53,20 @@ final class NowPlayingTab extends ReceiverTab {
         int top = screen.panelY();
         int column = x + COLUMN_X, right = columnRight();
 
-        screen.addTabWidget(new SeekBar(column + TIME_WIDTH + 4, top + SEEK_Y, right - column - 2 * (TIME_WIDTH + 4), 10));
+        screen.addTabWidget(
+                new SeekBar(column + TIME_WIDTH + 4, top + SEEK_Y, right - column - 2 * (TIME_WIDTH + 4), 10));
+
+        audioDropdown = AudioChoiceButton.create(THEME, right - AUDIO_WIDTH, top + ARTIST_Y - 2, AUDIO_WIDTH, screen);
+        audioDropdown.visible = screen.offersAudioChoice();
+        screen.addTabWidget(audioDropdown);
 
         int centre = column + (right - column) / 2;
         int rowTop = top + TRANSPORT_CENTRE_Y;
         screen.addTabWidget(new UiButton(THEME, centre - 13, rowTop - 13, 26, 26, UiButton.Look.PLAY,
                 () -> screen.sendControl(SpeakerControlC2SPacket.Action.PLAY_PAUSE, "", 0))
                 .icon(() -> screen.playing ? UiIcon.PAUSE : UiIcon.PLAY).iconSize(13)
-                .tooltip(() -> Component.translatable(screen.playing ? "gui.soundstage.player.pause" : "gui.soundstage.player.play")));
+                .tooltip(() -> Component.translatable(screen.playing ? "gui.soundstage.player.pause"
+                        : "gui.soundstage.player.play")));
         screen.addTabWidget(new UiButton(THEME, centre - 13 - 8 - 20, rowTop - 10, 20, 20, UiButton.Look.ICON,
                 () -> screen.sendControl(SpeakerControlC2SPacket.Action.STOP, "", 0))
                 .icon(UiIcon.STOP).iconSize(12).tooltip(Component.translatable("gui.soundstage.player.stop")));
@@ -83,7 +94,8 @@ final class NowPlayingTab extends ReceiverTab {
 
         Component viewQueue = viewQueueLabel();
         int linkWidth = UiButton.widthFor(viewQueue, true, 8, 2);
-        screen.addTabWidget(new UiButton(THEME, right - linkWidth, top + UP_NEXT_Y - 2, linkWidth, 12, UiButton.Look.LINK,
+        screen.addTabWidget(
+                new UiButton(THEME, right - linkWidth, top + UP_NEXT_Y - 2, linkWidth, 12, UiButton.Look.LINK,
                 () -> screen.showTab(AudioPlayerScreen.Tab.QUEUE))
                 .label(this::viewQueueLabel).icon(UiIcon.CHEVRON_RIGHT).iconSize(8).iconAfter());
     }
@@ -99,7 +111,8 @@ final class NowPlayingTab extends ReceiverTab {
 
     private int[] artistBox() {
         int top = screen.panelY() + ARTIST_Y;
-        return new int[]{x + COLUMN_X, top - 1, columnRight(), top + font().lineHeight + 1};
+        int right = screen.offersAudioChoice() ? columnRight() - AUDIO_WIDTH - AUDIO_ICON - 8 : columnRight();
+        return new int[]{x + COLUMN_X, top - 1, right, top + font().lineHeight + 1};
     }
 
     private int[] rowTextBox(int index, boolean hovered) {
@@ -119,6 +132,12 @@ final class NowPlayingTab extends ReceiverTab {
         int[] title = titleBox();
         titleLine.draw(g, font, titleText, Component.literal(titleText).withStyle(Style.EMPTY.withBold(true)),
                 title[0], title[1] + 1, title[2] - title[0], screen.hasTrack() ? THEME.text() : THEME.muted());
+        boolean audio = screen.offersAudioChoice();
+        if (audioDropdown != null) audioDropdown.visible = audio;
+        if (audio) {
+            UiDraw.icon(g, UiIcon.VOLUME, columnRight() - AUDIO_WIDTH - AUDIO_ICON - 3, top + ARTIST_Y,
+                    AUDIO_ICON, THEME.muted());
+        }
         int[] artist = artistBox();
         artistLine.draw(g, font, screen.artist, Component.literal(screen.artist), artist[0], artist[1] + 1,
                 artist[2] - artist[0], THEME.muted());
@@ -126,16 +145,21 @@ final class NowPlayingTab extends ReceiverTab {
         int chipX = x + COLUMN_X;
         int chipY = top + CHIPS_Y;
         if (screen.isLive() && screen.playing) {
-            chipX += chip(g, Component.translatable("gui.soundstage.receiver.state.live"), chipX, chipY, THEME.danger()) + 4;
+            chipX += chip(g, Component.translatable("gui.soundstage.receiver.state.live"), chipX, chipY,
+                    THEME.danger()) + 4;
         } else if (screen.playing) {
-            chipX += chip(g, Component.translatable("gui.soundstage.receiver.state.playing"), chipX, chipY, THEME.success()) + 4;
+            chipX += chip(g, Component.translatable("gui.soundstage.receiver.state.playing"), chipX, chipY,
+                    THEME.success()) + 4;
         } else if (screen.hasTrack()) {
-            chipX += chip(g, Component.translatable("gui.soundstage.receiver.state.paused"), chipX, chipY, THEME.warm()) + 4;
+            chipX += chip(g, Component.translatable("gui.soundstage.receiver.state.paused"), chipX, chipY,
+                    THEME.warm()) + 4;
         } else if (screen.synced) {
-            chipX += chip(g, Component.translatable("gui.soundstage.receiver.state.idle"), chipX, chipY, THEME.muted()) + 4;
+            chipX += chip(g, Component.translatable("gui.soundstage.receiver.state.idle"), chipX, chipY,
+                    THEME.muted()) + 4;
         }
         if (screen.levelling) {
-            chipX += chip(g, Component.translatable("gui.soundstage.receiver.state.levelling"), chipX, chipY, THEME.accent()) + 4;
+            chipX += chip(g, Component.translatable("gui.soundstage.receiver.state.levelling"), chipX, chipY,
+                    THEME.accent()) + 4;
         }
         if (screen.isReceiver() && !screen.pictureEnabled) {
             chip(g, Component.translatable("gui.soundstage.receiver.state.sound_only"), chipX, chipY, THEME.muted());
@@ -144,16 +168,17 @@ final class NowPlayingTab extends ReceiverTab {
         int right = columnRight();
         int seekTextY = top + SEEK_Y + 1;
         if (screen.trackDuration > 0) {
-            String elapsed = com.nachtraben.soundstage.core.TrackTime.format(screen.position(), screen.trackDuration);
-            String total = com.nachtraben.soundstage.core.TrackTime.format(screen.trackDuration, screen.trackDuration);
+            String elapsed = TrackTime.format(screen.position(), screen.trackDuration);
+            String total = TrackTime.format(screen.trackDuration, screen.trackDuration);
             g.text(font, elapsed, x + COLUMN_X, seekTextY, THEME.muted());
             g.text(font, total, right - font.width(total), seekTextY, THEME.muted());
         } else if (screen.hasTrack()) {
-            String elapsed = com.nachtraben.soundstage.core.TrackTime.format(screen.position());
+            String elapsed = TrackTime.format(screen.position());
             g.text(font, elapsed, x + COLUMN_X, seekTextY, THEME.muted());
         }
 
-        if (volumeSlider != null && !volumeSlider.isHoveredOrFocused() && (int) volumeSlider.actualValue() != screen.volume) {
+        if (volumeSlider != null && !volumeSlider.isHoveredOrFocused()
+                && (int) volumeSlider.actualValue() != screen.volume) {
             volumeSlider.setActualValue(screen.volume);
         }
         UiDraw.icon(g, screen.volume == 0 ? UiIcon.VOLUME_OFF : UiIcon.VOLUME, x + AudioPlayerScreen.PADDING,
@@ -163,8 +188,8 @@ final class NowPlayingTab extends ReceiverTab {
                 screen.volume > IAudioReceiver.LAVAPLAYER_MAX_VOLUME ? THEME.warm() : THEME.text());
 
         Component viewQueue = viewQueueLabel();
-        heading(g, Component.translatable("gui.soundstage.player.up_next"), x + AudioPlayerScreen.PADDING, top + UP_NEXT_Y,
-                right - UiButton.widthFor(viewQueue, true, 8, 2) - 8);
+        heading(g, Component.translatable("gui.soundstage.player.up_next"), x + AudioPlayerScreen.PADDING,
+                top + UP_NEXT_Y, right - UiButton.widthFor(viewQueue, true, 8, 2) - 8);
         boolean anyHovered = false;
         if (screen.queue.isEmpty()) {
             g.text(font, Component.translatable("gui.soundstage.receiver.queue_empty_hint"),
@@ -181,7 +206,8 @@ final class NowPlayingTab extends ReceiverTab {
             int[] box = rowTextBox(i, hovered && playable);
             if (hovered) {
                 anyHovered = true;
-                hoveredRowLine.draw(g, font, entry, Component.literal(entry), box[0], box[1] + 1, box[2] - box[0], THEME.text());
+                hoveredRowLine.draw(g, font, entry, Component.literal(entry), box[0], box[1] + 1, box[2] - box[0],
+                        THEME.text());
                 if (playable) UiDraw.iconCentred(g, UiIcon.PLAY, right - 8, rowTop + 6, 9, THEME.accent());
             } else {
                 g.text(font, UiText.ellipsize(font, entry, box[2] - box[0]), box[0], box[1] + 1, THEME.text());
@@ -230,9 +256,11 @@ final class NowPlayingTab extends ReceiverTab {
 
         @Override
         //? if >=26.1 {
-        /*protected void extractWidgetRenderState(net.minecraft.client.gui.GuiGraphicsExtractor raw, int mouseX, int mouseY, float partialTick) {
+        /*protected void extractWidgetRenderState(net.minecraft.client.gui.GuiGraphicsExtractor raw, int mouseX,
+                int mouseY, float partialTick) {
         *///?} else {
-        protected void renderWidget(net.minecraft.client.gui.GuiGraphics raw, int mouseX, int mouseY, float partialTick) {
+        protected void renderWidget(net.minecraft.client.gui.GuiGraphics raw, int mouseX, int mouseY,
+                float partialTick) {
         //?}
             UiGraphics g = UiGraphics.of(raw);
             active = screen.trackDuration > 0;
@@ -249,10 +277,10 @@ final class NowPlayingTab extends ReceiverTab {
             if (isHoveredOrFocused() || dragged >= 0) UiDraw.circle(g, at, centre, 4, 0xFFFFFFFF);
             long millis = (long) (shown() * screen.trackDuration);
             setMessage(Component.translatable("gui.soundstage.player.seek_value",
-                    com.nachtraben.soundstage.core.TrackTime.format(millis, screen.trackDuration)));
+                    TrackTime.format(millis, screen.trackDuration)));
             if (isHovered() && dragged < 0) {
                 double hover = Math.max(0, Math.min(1, (mouseX - left) / (right - left)));
-                screen.tooltip(g, Component.literal(com.nachtraben.soundstage.core.TrackTime.format(
+                screen.tooltip(g, Component.literal(TrackTime.format(
                         (long) (hover * screen.trackDuration), screen.trackDuration)), mouseX, mouseY);
             }
         }
@@ -299,19 +327,20 @@ final class NowPlayingTab extends ReceiverTab {
         /*@Override
         public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
             int keyCode = event.key();
-            if (screen.trackDuration <= 0 || !isFocused() || (keyCode != com.mojang.blaze3d.platform.InputConstants.KEY_LEFT
+            if (screen.trackDuration <= 0 || !isFocused()
+                    || (keyCode != com.mojang.blaze3d.platform.InputConstants.KEY_LEFT
                     && keyCode != com.mojang.blaze3d.platform.InputConstants.KEY_RIGHT)) {
                 return super.keyPressed(event);
             }
         *///?} else {
         @Override
         public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-            if (screen.trackDuration <= 0 || !isFocused() || (keyCode != com.mojang.blaze3d.platform.InputConstants.KEY_LEFT
-                    && keyCode != com.mojang.blaze3d.platform.InputConstants.KEY_RIGHT)) {
+            if (screen.trackDuration <= 0 || !isFocused() || (keyCode != InputConstants.KEY_LEFT
+                    && keyCode != InputConstants.KEY_RIGHT)) {
                 return super.keyPressed(keyCode, scanCode, modifiers);
             }
         //?}
-            long step = keyCode == com.mojang.blaze3d.platform.InputConstants.KEY_RIGHT ? 5_000 : -5_000;
+            long step = keyCode == InputConstants.KEY_RIGHT ? 5_000 : -5_000;
             screen.sendSeek(Math.max(0, Math.min(screen.trackDuration, screen.position() + step)));
             return true;
         }

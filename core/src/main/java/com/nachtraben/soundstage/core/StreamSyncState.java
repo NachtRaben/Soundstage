@@ -177,8 +177,7 @@ public final class StreamSyncState {
             return Gap.END_OF_STREAM;
         }
 
-        boolean packetsStillArriving = RigFaults.on("no-pause-guard")
-                || nowMillis - lastPacketMillis <= DESYNC_THRESHOLD_MILLIS;
+        boolean packetsStillArriving = nowMillis - lastPacketMillis <= DESYNC_THRESHOLD_MILLIS;
         if (packetsStillArriving && nowMillis - lastRealDataMillis > DESYNC_THRESHOLD_MILLIS) {
             if (resyncTarget != -1 && resyncTarget != nextSequence) {
                 recordReposition(nextSequence, resyncTarget);

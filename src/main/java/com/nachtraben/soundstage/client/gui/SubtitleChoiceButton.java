@@ -7,7 +7,6 @@ import com.nachtraben.soundstage.network.SubtitleOptionsS2CPacket;
 import dev.armadeus.armalib.core.ui.Theme;
 import dev.armadeus.armalib.platform.client.ClientNetwork;
 import dev.armadeus.armalib.ui.UiDropdown;
-import com.nachtraben.soundstage.RigStaging;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -31,7 +30,6 @@ final class SubtitleChoiceButton {
                 choice -> {
                     SubtitleOptionsS2CPacket options = ClientSubtitleOptions.get(receiverPos.get());
                     if (options == null) return;
-                    if (RigStaging.fault("dropdown-ignores-rows")) return;
                     ClientNetwork.sendToServer(new SubtitleChoiceC2SPacket(sendAt, choice));
                 });
     }

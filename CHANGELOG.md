@@ -2,6 +2,28 @@
 
 Newest first. Each section is pasted into Modrinth and CurseForge as that version's changelog.
 
+## 1.0.1
+
+- Server owners updating from 1.0.0: your config keeps 1.0.0's lower video quality limit. To get the new, sharper default, delete the `maxVideoHeight` line from `config/soundstage.aon`.
+- Added the Remote: open your A/V receiver's screen from up to 96 blocks away in the same dimension. Craft it from a stone button, redstone and a copper ingot, then sneak and use it on the receiver to link it. It matches the receiver's finish, lights up with it, and respects the receiver's lock. Put it alone in a crafting grid to unlink it.
+- Films and videos that have more than one language, including YouTube's dubbed videos, can switch language from the receiver's Playing tab. The receiver remembers your choice for what plays next. Director's commentary and audio description can be picked too.
+- Displays can show pictures (PNG or JPEG) from the media folder, or from a web link on servers that allow direct links, and videos without sound now play too, for signs and promotional videos. A picture alone in the queue stays up until it's skipped; with something queued after it, it moves on after 10 seconds, so a looping queue of pictures makes a slideshow. Pictures and videos without sound need ffmpeg on the server. Server owners can change the time with `imageDisplaySeconds`.
+- Video is sharper: the bigger the display, the sharper the picture, up to full HD. Sharper video uses more of each watching player's internet connection, which is worth knowing if you host from home.
+- Servers now show video on as many receivers as they can handle, instead of a fixed four. A receiver waiting its turn plays the sound and shows what's playing until its picture can start. Server owners can set a fixed limit with `maxPicturesEncoding`.
+- If the server can't keep up with a video, it lowers the picture quality first, so the sound keeps playing. If that's still too much, the sound plays on and the screen shows what's playing instead.
+- Players who aren't looking at a display no longer download its video, and turning to the screen still shows the picture straight away.
+- Linking a display while a video plays now shows the picture within a second or two, instead of waiting for the next track.
+- Receivers with no display linked no longer prepare video, so they cost the server only the sound.
+- Video plays more smoothly on slower computers, and skips frames to stay in sync with the sound instead of falling behind. It also eases off if playing it would slow your game down.
+- Twitch streams broadcast at a demanding quality now play smoothly on displays, and some Twitch streams that showed no picture now do.
+- On servers that allow direct links, more video files play: some files whose sound couldn't be read before now play with sound and picture.
+- Large displays no longer shimmer when seen from a distance.
+- Fixed films starting on the director's commentary when it's listed first.
+- Fixed screens at the edge of your view sometimes showing the now-playing card instead of their part of the video.
+- Fixed a speaker picked with the middle mouse button showing its grille in your hand and inventory when it had been removed.
+- Fixed speakers, subwoofers, party boxes and receivers being invisible on Minecraft 26.2 and 26.3 when held by another player, dropped on the ground or placed in an item frame.
+- Fixed a way a modified client could make the server work hard by switching subtitles over and over.
+
 ## 1.0.0
 
 The first release of Soundstage!

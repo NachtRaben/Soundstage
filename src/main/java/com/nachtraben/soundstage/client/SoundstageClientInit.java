@@ -1,17 +1,38 @@
 package com.nachtraben.soundstage.client;
 
+import com.nachtraben.soundstage.SoundstageInit;
+import com.nachtraben.soundstage.block.ReceiverBlockEntity;
+import com.nachtraben.soundstage.block.ScreenBlockEntity;
 import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
-import com.nachtraben.soundstage.client.gui.SpeakerConfigScreen;
+import com.nachtraben.soundstage.client.audio.AudioDecoder;
+import com.nachtraben.soundstage.client.audio.ClientAudioReceiver;
+import com.nachtraben.soundstage.client.audio.LinuxShareOutput;
+import com.nachtraben.soundstage.client.audio.LiveInputClient;
 import com.nachtraben.soundstage.client.gui.AudioPlayerScreen;
+import com.nachtraben.soundstage.client.gui.DisplayScreen;
+import com.nachtraben.soundstage.client.gui.SpeakerConfigScreen;
+import com.nachtraben.soundstage.client.render.ReceiverBlockEntityRenderer;
+import com.nachtraben.soundstage.client.render.ScreenBlockEntityRenderer;
+import com.nachtraben.soundstage.client.render.ScreenOverlay;
 import com.nachtraben.soundstage.client.render.SpeakerBlockEntityRenderer;
+import com.nachtraben.soundstage.client.render.StaticMesh;
+import com.nachtraben.soundstage.client.video.ClientDisplayInfo;
+import com.nachtraben.soundstage.client.video.ClientSubtitleOptions;
+import com.nachtraben.soundstage.client.video.ClientSubtitles;
+import com.nachtraben.soundstage.client.video.ClientVideoReceivers;
+import com.nachtraben.soundstage.client.video.NowPlayingCards;
 import com.nachtraben.soundstage.network.NetworkHandler;
+import com.nachtraben.soundstage.registry.ModBlockEntities;
 import dev.armadeus.armalib.platform.client.ClientRegistration;
 import dev.armadeus.armalib.platform.client.event.ClientLifecycleEvents;
 import dev.armadeus.armalib.platform.client.event.ClientPlayerEvents;
 import dev.armadeus.armalib.platform.client.event.ClientTickEvents;
 import dev.armadeus.armalib.platform.client.event.LevelRenderEvents;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 
 public class SoundstageClientInit {
 
@@ -23,33 +44,41 @@ public class SoundstageClientInit {
     }
 
     public static void openSpeakerScreen(SpeakerBlockEntity sbe) {
-        net.minecraft.client.Minecraft.getInstance().setScreen(new AudioPlayerScreen(sbe));
+        Minecraft.getInstance().setScreen(new AudioPlayerScreen(sbe));
     }
 
-    public static void openReceiverScreen(com.nachtraben.soundstage.block.ReceiverBlockEntity cbe) {
-        net.minecraft.client.Minecraft.getInstance().setScreen(new AudioPlayerScreen(cbe));
+    public static void openReceiverScreen(ReceiverBlockEntity cbe) {
+        Minecraft.getInstance().setScreen(new AudioPlayerScreen(cbe));
+    }
+
+    public static void openFromRemote(BlockPos pos) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level != null
+                && minecraft.level.getBlockEntity(pos) instanceof ReceiverBlockEntity receiver) {
+            openReceiverScreen(receiver);
+        }
     }
 
     public static void openSpeakerConfigScreen(SpeakerBlockEntity sbe) {
-        net.minecraft.client.Minecraft.getInstance().setScreen(new SpeakerConfigScreen(sbe));
+        Minecraft.getInstance().setScreen(new SpeakerConfigScreen(sbe));
     }
 
-    public static void openDisplayScreen(com.nachtraben.soundstage.block.ScreenBlockEntity screen) {
-        net.minecraft.client.Minecraft.getInstance().setScreen(
-                new com.nachtraben.soundstage.client.gui.DisplayScreen(screen));
+    public static void openDisplayScreen(ScreenBlockEntity screen) {
+        Minecraft.getInstance().setScreen(
+                new DisplayScreen(screen));
     }
 
     public static final ClientPlayerEvents.LevelChanged ON_LEVEL_CHANGED = new ClientPlayerEvents.LevelChanged() {
         @Override
-        public void on(net.minecraft.client.multiplayer.ClientLevel oldLevel,
-                       net.minecraft.client.multiplayer.ClientLevel newLevel) {
-            com.nachtraben.soundstage.client.audio.AudioDecoder.clear();
-            com.nachtraben.soundstage.client.video.ClientVideoReceivers.clear();
-            com.nachtraben.soundstage.client.video.ClientSubtitles.clear();
-            com.nachtraben.soundstage.client.video.ClientDisplayInfo.clear();
-            com.nachtraben.soundstage.client.video.ClientSubtitleOptions.clear();
-            com.nachtraben.soundstage.client.video.NowPlayingCards.clear();
-            com.nachtraben.soundstage.client.render.StaticMesh.invalidateAll();
+        public void on(ClientLevel oldLevel,
+                       ClientLevel newLevel) {
+            AudioDecoder.clear();
+            ClientVideoReceivers.clear();
+            ClientSubtitles.clear();
+            ClientDisplayInfo.clear();
+            ClientSubtitleOptions.clear();
+            NowPlayingCards.clear();
+            StaticMesh.invalidateAll();
         }
     };
 
@@ -57,75 +86,77 @@ public class SoundstageClientInit {
         NetworkHandler.initClient();
 
         //? if <1.20.5 {
-        /*ClientTickEvents.POST.register(client -> com.nachtraben.soundstage.util.ServerPause.clientPaused = client.isPaused());
+        /*ClientTickEvents.POST.register(client ->
+                com.nachtraben.soundstage.util.ServerPause.clientPaused = client.isPaused());
         *///?}
         ClientTickEvents.POST.register(
-                minecraft -> com.nachtraben.soundstage.client.audio.LiveInputClient.tick());
-        ClientTickEvents.POST.register(com.nachtraben.soundstage.client.audio.AudioDecoder::tick);
+                minecraft -> LiveInputClient.tick());
+        ClientTickEvents.POST.register(AudioDecoder::tick);
         ClientTickEvents.POST.register(
                 minecraft -> {
-                    com.nachtraben.soundstage.client.video.ClientVideoReceivers.tick();
-                    com.nachtraben.soundstage.client.video.NowPlayingCards.tick();
+                    ClientVideoReceivers.tick();
+                    NowPlayingCards.tick();
                 });
         ClientLifecycleEvents.STOPPING.register(
-                minecraft -> com.nachtraben.soundstage.client.audio.LinuxShareOutput.removeIfCreated());
+                minecraft -> LinuxShareOutput.removeIfCreated());
 
         ClientRegistration.blockEntityRenderer(
-            com.nachtraben.soundstage.registry.ModBlockEntities.SPEAKER_BLOCK_ENTITY,
+            ModBlockEntities.SPEAKER_BLOCK_ENTITY,
                 SpeakerBlockEntityRenderer::new
         );
         ClientRegistration.blockEntityRenderer(
-            com.nachtraben.soundstage.registry.ModBlockEntities.SATELLITE_SPEAKER_BLOCK_ENTITY,
+            ModBlockEntities.SATELLITE_SPEAKER_BLOCK_ENTITY,
                 SpeakerBlockEntityRenderer::new
         );
         ClientRegistration.blockEntityRenderer(
-            com.nachtraben.soundstage.registry.ModBlockEntities.CENTER_SPEAKER_BLOCK_ENTITY,
+            ModBlockEntities.CENTER_SPEAKER_BLOCK_ENTITY,
                 SpeakerBlockEntityRenderer::new
         );
         ClientRegistration.blockEntityRenderer(
-            com.nachtraben.soundstage.registry.ModBlockEntities.SUBWOOFER_BLOCK_ENTITY,
+            ModBlockEntities.SUBWOOFER_BLOCK_ENTITY,
                 SpeakerBlockEntityRenderer::new
         );
         ClientRegistration.blockEntityRenderer(
-            com.nachtraben.soundstage.registry.ModBlockEntities.PARTY_BOX_BLOCK_ENTITY,
+            ModBlockEntities.PARTY_BOX_BLOCK_ENTITY,
                 SpeakerBlockEntityRenderer::new
         );
         ClientRegistration.blockEntityRenderer(
-            com.nachtraben.soundstage.registry.ModBlockEntities.RECEIVER_BLOCK_ENTITY,
-                com.nachtraben.soundstage.client.render.ReceiverBlockEntityRenderer::new
+            ModBlockEntities.RECEIVER_BLOCK_ENTITY,
+                ReceiverBlockEntityRenderer::new
         );
         ClientRegistration.blockEntityRenderer(
-            com.nachtraben.soundstage.registry.ModBlockEntities.SCREEN_BLOCK_ENTITY,
-                com.nachtraben.soundstage.client.render.ScreenBlockEntityRenderer::new
+            ModBlockEntities.SCREEN_BLOCK_ENTITY,
+                ScreenBlockEntityRenderer::new
         );
-
-        if (com.nachtraben.soundstage.RigStaging.sessionStages("soundstage:item-and-cabinet-drawn", "no-item-renderer")
-                || com.nachtraben.soundstage.RigStaging.sessionStages("soundstage:item-icons", "no-item-renderer")) {
-            org.slf4j.LoggerFactory.getLogger("Soundstage").warn("Soundstage: red control — the item "
-                    + "renderer is not registered (rig soundstage:item-and-cabinet-drawn)");
-        } else {
-            //? if >=1.21.11 {
-            /*ClientRegistration.specialModelRenderer(
-                    ResourceLocation.fromNamespaceAndPath(com.nachtraben.soundstage.SoundstageInit.MODID, "block_item"),
-                    com.nachtraben.soundstage.client.render.BlockItemRenderer.Unbaked.CODEC);
-            *///?} else {
-            ClientRegistration.itemRenderer(com.nachtraben.soundstage.client.render.BlockItemRenderer::new,
-                    com.nachtraben.soundstage.registry.ModItems.SPEAKER_ITEM,
-                    com.nachtraben.soundstage.registry.ModItems.SATELLITE_SPEAKER_ITEM,
-                    com.nachtraben.soundstage.registry.ModItems.CENTER_SPEAKER_ITEM,
-                    com.nachtraben.soundstage.registry.ModItems.SUBWOOFER_ITEM,
-                    com.nachtraben.soundstage.registry.ModItems.PARTY_BOX_ITEM,
-                    com.nachtraben.soundstage.registry.ModItems.RECEIVER_ITEM);
-            //?}
-        }
 
         //? if >=1.21.11 {
-        /*ClientRegistration.renderPipeline(com.nachtraben.soundstage.client.render.SoundstageRenderTypes.SPIDER_PIPELINE,
+        /*ClientRegistration.specialModelRenderer(
+                ResourceLocation.fromNamespaceAndPath(com.nachtraben.soundstage.SoundstageInit.MODID, "block_item"),
+                com.nachtraben.soundstage.client.render.BlockItemRenderer.Unbaked.CODEC);
+        ClientRegistration.specialModelRenderer(
+                ResourceLocation.fromNamespaceAndPath(com.nachtraben.soundstage.SoundstageInit.MODID, "remote"),
+                com.nachtraben.soundstage.client.render.RemoteItemRenderer.Unbaked.CODEC);
+        *///?} else {
+        ClientRegistration.itemRenderer(com.nachtraben.soundstage.client.render.BlockItemRenderer::new,
+                com.nachtraben.soundstage.registry.ModItems.SPEAKER_ITEM,
+                com.nachtraben.soundstage.registry.ModItems.SATELLITE_SPEAKER_ITEM,
+                com.nachtraben.soundstage.registry.ModItems.CENTER_SPEAKER_ITEM,
+                com.nachtraben.soundstage.registry.ModItems.SUBWOOFER_ITEM,
+                com.nachtraben.soundstage.registry.ModItems.PARTY_BOX_ITEM,
+                com.nachtraben.soundstage.registry.ModItems.RECEIVER_ITEM);
+        ClientRegistration.itemRenderer(com.nachtraben.soundstage.client.render.RemoteItemRenderer::new,
+                com.nachtraben.soundstage.registry.ModItems.REMOTE);
+        //?}
+
+        //? if >=1.21.11 {
+        /*ClientRegistration.renderPipeline(
+                com.nachtraben.soundstage.client.render.SoundstageRenderTypes.SPIDER_PIPELINE,
                 compiled -> com.nachtraben.soundstage.client.render.SoundstageRenderTypes.spiderCompiled());
-        if (com.nachtraben.soundstage.client.render.SoundstageRenderTypes.SPIDER_NO_DEPTH_PIPELINE != null) {
-            ClientRegistration.renderPipeline(com.nachtraben.soundstage.client.render.SoundstageRenderTypes.SPIDER_NO_DEPTH_PIPELINE,
-                    compiled -> { });
-        }
+        //? if >=26.2 {
+        /^ClientRegistration.renderPipeline(
+                com.nachtraben.soundstage.client.render.SoundstageRenderTypes.VIDEO_MIP_PIPELINE,
+                compiled -> com.nachtraben.soundstage.client.render.SoundstageRenderTypes.videoMipCompiled());
+        ^///?}
         *///?} else {
         ClientRegistration.coreShader(
                 com.nachtraben.soundstage.client.render.SoundstageRenderTypes.spiderShaderId(),
@@ -134,33 +165,34 @@ public class SoundstageClientInit {
         //?}
 
         LevelRenderEvents.AFTER_BLOCK_ENTITIES.register(context -> {
-            com.nachtraben.soundstage.client.render.StaticMesh.flushDeferred();
+            StaticMesh.flushDeferred();
             //? if <1.21.11 {
-            com.nachtraben.soundstage.client.render.ScreenBlockEntityRenderer.flushCaptions();
+            ScreenBlockEntityRenderer.flushCaptions();
             //?}
-            com.nachtraben.soundstage.client.audio.ClientAudioReceiver.endRenderFrame();
+            ClientVideoReceivers.endRenderFrame();
+            ClientAudioReceiver.endRenderFrame();
         });
         LevelRenderEvents.AFTER_LEVEL.register(context ->
-                com.nachtraben.soundstage.client.render.ScreenOverlay.drawAfterLevel(
+                ScreenOverlay.drawAfterLevel(
                         context.modelView(), context.projection()));
 
         ClientPlayerEvents.LEAVE.register(player -> {
-            com.nachtraben.soundstage.client.audio.LiveInputClient.shutdown();
-            com.nachtraben.soundstage.client.audio.AudioDecoder.clear();
-            com.nachtraben.soundstage.client.video.ClientVideoReceivers.clear();
-            com.nachtraben.soundstage.client.video.ClientSubtitles.clear();
-            com.nachtraben.soundstage.client.video.ClientDisplayInfo.clear();
-            com.nachtraben.soundstage.client.video.ClientSubtitleOptions.clear();
-            com.nachtraben.soundstage.client.video.NowPlayingCards.clear();
-            com.nachtraben.soundstage.client.render.StaticMesh.invalidateAll();
+            LiveInputClient.shutdown();
+            AudioDecoder.clear();
+            ClientVideoReceivers.clear();
+            ClientSubtitles.clear();
+            ClientDisplayInfo.clear();
+            ClientSubtitleOptions.clear();
+            NowPlayingCards.clear();
+            StaticMesh.invalidateAll();
         });
 
         ClientPlayerEvents.LEVEL_CHANGED.register(ON_LEVEL_CHANGED);
 
         ClientRegistration.reloadListener(
                 ResourceLocation.fromNamespaceAndPath(
-                        com.nachtraben.soundstage.SoundstageInit.MODID, "static_meshes"),
-                (net.minecraft.server.packs.resources.ResourceManagerReloadListener)
-                        manager -> com.nachtraben.soundstage.client.render.StaticMesh.invalidateAll());
+                        SoundstageInit.MODID, "static_meshes"),
+                (ResourceManagerReloadListener)
+                        manager -> StaticMesh.invalidateAll());
     }
 }

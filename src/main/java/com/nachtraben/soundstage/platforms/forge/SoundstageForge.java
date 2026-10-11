@@ -12,7 +12,8 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 public class SoundstageForge {
     public SoundstageForge() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
-        com.nachtraben.soundstage.config.SoundstageConfig.install(new com.nachtraben.soundstage.config.SoundstageConfigSpec());
+        com.nachtraben.soundstage.config.SoundstageConfig.install(
+                new com.nachtraben.soundstage.config.SoundstageConfigSpec());
         SoundstageInit.entrypoint(new com.nachtraben.soundstage.ModPlatform() {
             @Override
             public String getModloader() {
@@ -24,7 +25,8 @@ public class SoundstageForge {
             }
         });
         if (net.minecraftforge.fml.loading.FMLEnvironment.dist.isClient()) {
-            com.nachtraben.soundstage.config.SoundstageAppearance.install(new com.nachtraben.soundstage.config.AppearanceConfigSpec());
+            com.nachtraben.soundstage.config.SoundstageAppearance.install(
+                    new com.nachtraben.soundstage.config.AppearanceConfigSpec());
             SoundstageClientInit.clientEntrypoint();
             modEventBus.addListener(this::clientSetup);
         }

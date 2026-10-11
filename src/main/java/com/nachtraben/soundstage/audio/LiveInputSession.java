@@ -4,6 +4,8 @@ import com.nachtraben.soundstage.core.LiveInputBuffer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -11,7 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public final class LiveInputSession {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     public enum End {
         STOPPED(true, null),
@@ -94,7 +96,8 @@ public final class LiveInputSession {
 
     void end(End reason) {
         if (!ended.compareAndSet(null, reason)) return;
-        LOGGER.info("Share from {} on receiver {} ended: {} ({} packets received, {} refused, {} skipped, {} underruns)",
+        LOGGER.info(
+                "Share from {} on receiver {} ended: {} ({} packets received, {} refused, {} skipped, {} underruns)",
                 sharerName, pos, reason, buffer.accepted(), buffer.refused(), buffer.skipped(), buffer.underruns());
         buffer.close();
         LiveInputSessions.forget(this);

@@ -9,7 +9,8 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 public class SpeakerAimC2SPacket implements CustomPacketPayload {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "speaker_aim_c2s");
+    public static final ResourceLocation ID =
+            ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "speaker_aim_c2s");
     public static final Type<SpeakerAimC2SPacket> TYPE = new Type<>(ID);
     public static final StreamCodec<FriendlyByteBuf, SpeakerAimC2SPacket> STREAM_CODEC = StreamCodec.ofMember(
             SpeakerAimC2SPacket::write, SpeakerAimC2SPacket::new

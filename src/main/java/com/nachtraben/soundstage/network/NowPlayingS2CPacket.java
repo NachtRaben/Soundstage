@@ -2,6 +2,7 @@ package com.nachtraben.soundstage.network;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -23,7 +24,7 @@ public class NowPlayingS2CPacket implements CustomPacketPayload {
 
     private static final int MAX_TEXT = 256;
 
-    public final net.minecraft.core.BlockPos receiverPos;
+    public final BlockPos receiverPos;
     public final String title;
     public final String artist;
     public final String artworkUrl;

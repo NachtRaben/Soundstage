@@ -9,7 +9,8 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 public class QueueOpC2SPacket implements CustomPacketPayload {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "queue_op_c2s");
+    public static final ResourceLocation ID =
+            ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "queue_op_c2s");
     public static final Type<QueueOpC2SPacket> TYPE = new Type<>(ID);
     public static final StreamCodec<FriendlyByteBuf, QueueOpC2SPacket> STREAM_CODEC = StreamCodec.ofMember(
             QueueOpC2SPacket::write, QueueOpC2SPacket::new

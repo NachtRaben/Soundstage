@@ -1,24 +1,37 @@
 package com.nachtraben.soundstage.block.speaker;
 
-import dev.armadeus.armalib.platform.block.SaveView;
-
+import com.nachtraben.soundstage.audio.SpeakerAudience;
 import com.nachtraben.soundstage.client.audio.AudioDecoder;
+import com.nachtraben.soundstage.client.render.StaticMesh;
 import com.nachtraben.soundstage.core.ChannelMode;
+import com.nachtraben.soundstage.core.PcmRing;
+import com.nachtraben.soundstage.core.SpeakerAcoustics;
 import com.nachtraben.soundstage.registry.ModBlockEntities;
+import dev.armadeus.armalib.platform.block.LoadAware;
+import dev.armadeus.armalib.platform.block.SaveView;
 import lombok.Getter;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class SpeakerBlockEntity extends BlockEntity implements dev.armadeus.armalib.platform.block.LoadAware {
-    public final transient com.nachtraben.soundstage.client.render.StaticMesh renderCache =
-            new com.nachtraben.soundstage.client.render.StaticMesh();
+import java.util.ArrayList;
+import java.util.List;
+
+public class SpeakerBlockEntity extends BlockEntity implements LoadAware {
+    public final transient StaticMesh renderCache =
+            new StaticMesh();
 
     @Getter
     private String url = "";
@@ -44,7 +57,7 @@ public class SpeakerBlockEntity extends BlockEntity implements dev.armadeus.arma
     private static final int AUDIENCE_RECHECK_TICKS = 4;
 
     public static final int MIN_DELAY_MS = 0;
-    public static final int MAX_DELAY_MS = com.nachtraben.soundstage.core.PcmRing.MAX_DELAY_FRAMES * 20;
+    public static final int MAX_DELAY_MS = PcmRing.MAX_DELAY_FRAMES * 20;
 
     @Getter
     private int delayMs = 0;
@@ -59,7 +72,7 @@ public class SpeakerBlockEntity extends BlockEntity implements dev.armadeus.arma
     private SpeakerFinish finish;
 
     private final long settingsPublicationId =
-            com.nachtraben.soundstage.audio.SpeakerAudience.nextPublicationId();
+            SpeakerAudience.nextPublicationId();
 
     public SpeakerBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.SPEAKER_BLOCK_ENTITY.get(), pos, state);
@@ -68,8 +81,8 @@ public class SpeakerBlockEntity extends BlockEntity implements dev.armadeus.arma
         }
         this.finish = defaultFinish();
     }
-    
-    protected SpeakerBlockEntity(net.minecraft.world.level.block.entity.BlockEntityType<?> type, BlockPos pos, BlockState state) {
+
+    protected SpeakerBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
         if (state.getBlock() instanceof AbstractSpeakerBlock asb) {
             this.channelMode = asb.getValidModes()[0];
@@ -148,13 +161,15 @@ public class SpeakerBlockEntity extends BlockEntity implements dev.armadeus.arma
     }
     *///?} else if >=1.20.5 {
     @Override
-    protected void saveAdditional(net.minecraft.nbt.CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+    protected void saveAdditional(net.minecraft.nbt.CompoundTag tag,
+                                  net.minecraft.core.HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         save(SaveView.writer(tag));
     }
 
     @Override
-    protected void loadAdditional(net.minecraft.nbt.CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+    protected void loadAdditional(net.minecraft.nbt.CompoundTag tag,
+                                  net.minecraft.core.HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         load(SaveView.reader(tag));
     }
@@ -223,22 +238,22 @@ public class SpeakerBlockEntity extends BlockEntity implements dev.armadeus.arma
         if (level != null) {
             BlockState state = getBlockState();
             level.sendBlockUpdated(worldPosition, state, state,
-                    net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+                    Block.UPDATE_CLIENTS);
         }
     }
     @Nullable
     public BlockPos getReceiverPos() { return receiverPos; }
     public void setReceiverPos(@Nullable BlockPos pos) {
         this.receiverPos = pos;
-        if (pos != null && level instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-            String path = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+        if (pos != null && level instanceof ServerLevel serverLevel) {
+            String path = BuiltInRegistries.BLOCK
                     .getKey(serverLevel.getBlockState(worldPosition).getBlock()).getPath();
-            com.nachtraben.soundstage.audio.SpeakerAudience.publishAcoustics(
+            SpeakerAudience.publishAcoustics(
                     serverLevel, worldPosition,
-                    com.nachtraben.soundstage.core.SpeakerAcoustics.forBlockPath(path));
-            com.nachtraben.soundstage.audio.SpeakerAudience.publishVolume(serverLevel, worldPosition,
+                    SpeakerAcoustics.forBlockPath(path));
+            SpeakerAudience.publishVolume(serverLevel, worldPosition,
                     settingsPublicationId, volumePercent);
-            com.nachtraben.soundstage.audio.SpeakerAudience.publishChannel(serverLevel, worldPosition,
+            SpeakerAudience.publishChannel(serverLevel, worldPosition,
                     settingsPublicationId, channelMode);
         }
         setChanged();
@@ -259,8 +274,8 @@ public class SpeakerBlockEntity extends BlockEntity implements dev.armadeus.arma
 
     public void setChannelMode(ChannelMode channelMode) {
         this.channelMode = channelMode;
-        if (level instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-            com.nachtraben.soundstage.audio.SpeakerAudience.publishChannel(serverLevel, worldPosition,
+        if (level instanceof ServerLevel serverLevel) {
+            SpeakerAudience.publishChannel(serverLevel, worldPosition,
                     settingsPublicationId, channelMode);
         }
         setChanged();
@@ -285,49 +300,45 @@ public class SpeakerBlockEntity extends BlockEntity implements dev.armadeus.arma
         int clamped = Mth.clamp(volumePercent, MIN_VOLUME_PERCENT, MAX_VOLUME_PERCENT);
         if (this.volumePercent == clamped) return;
         this.volumePercent = clamped;
-        if (level instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-            com.nachtraben.soundstage.audio.SpeakerAudience.publishVolume(serverLevel, worldPosition,
+        if (level instanceof ServerLevel serverLevel) {
+            SpeakerAudience.publishVolume(serverLevel, worldPosition,
                     settingsPublicationId, clamped);
-            com.nachtraben.soundstage.audio.SpeakerAudience.publishChannel(serverLevel, worldPosition,
+            SpeakerAudience.publishChannel(serverLevel, worldPosition,
                     settingsPublicationId, channelMode);
         }
         setChanged();
     }
     public int getDelayFrames() { return delayMs / 20; }
 
-    public static void serverTick(@NotNull net.minecraft.world.level.Level level, @NotNull BlockPos pos,
+    public static void serverTick(@NotNull Level level, @NotNull BlockPos pos,
                                   @NotNull SpeakerBlockEntity speaker) {
-        if (!(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) {
+        if (!(level instanceof ServerLevel serverLevel)) {
             return;
         }
         if (Math.floorMod(level.getGameTime() + pos.asLong(), AUDIENCE_RECHECK_TICKS) != 0) {
             return;
         }
 
-        double reach = com.nachtraben.soundstage.RigStaging.fault("range-ignored")
-                ? Double.MAX_VALUE : speaker.getRange() + RANGE_DELIVERY_MARGIN;
+        double reach = speaker.getRange() + RANGE_DELIVERY_MARGIN;
         double reachSqr = reach * reach;
-        java.util.List<net.minecraft.server.level.ServerPlayer> listeners = new java.util.ArrayList<>();
-        for (net.minecraft.server.level.ServerPlayer player : serverLevel.players()) {
+        List<ServerPlayer> listeners = new ArrayList<>();
+        for (ServerPlayer player : serverLevel.players()) {
             if (player.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) < reachSqr) {
                 listeners.add(player);
             }
         }
-        if (com.nachtraben.soundstage.RigStaging.fault("sticky-audience")) {
-            listeners.addAll(com.nachtraben.soundstage.audio.SpeakerAudience.collect(serverLevel, java.util.List.of(pos)));
-        }
-        String path = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+        String path = BuiltInRegistries.BLOCK
                 .getKey(serverLevel.getBlockState(pos).getBlock()).getPath();
-        com.nachtraben.soundstage.audio.SpeakerAudience.publish(serverLevel, pos, listeners,
-                com.nachtraben.soundstage.core.SpeakerAcoustics.forBlockPath(path));
-        com.nachtraben.soundstage.audio.SpeakerAudience.publishVolume(serverLevel, pos,
+        SpeakerAudience.publish(serverLevel, pos, listeners,
+                SpeakerAcoustics.forBlockPath(path));
+        SpeakerAudience.publishVolume(serverLevel, pos,
                 speaker.settingsPublicationId, speaker.volumePercent);
-        com.nachtraben.soundstage.audio.SpeakerAudience.publishChannel(serverLevel, pos,
+        SpeakerAudience.publishChannel(serverLevel, pos,
                 speaker.settingsPublicationId, speaker.channelMode);
         SpeakerDance.serverTick(serverLevel, pos, speaker);
     }
 
-    public static void clientTick(@NotNull net.minecraft.world.level.Level level, @NotNull BlockPos pos,
+    public static void clientTick(@NotNull Level level, @NotNull BlockPos pos,
                                   @NotNull SpeakerBlockEntity speaker) {
         if (!level.isClientSide()) {
             return;
@@ -339,14 +350,14 @@ public class SpeakerBlockEntity extends BlockEntity implements dev.armadeus.arma
     public void onLoad() {
         //? if neoforge
         super.onLoad();
-        if (level instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-            String path = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+        if (level instanceof ServerLevel serverLevel) {
+            String path = BuiltInRegistries.BLOCK
                     .getKey(getBlockState().getBlock()).getPath();
-            com.nachtraben.soundstage.audio.SpeakerAudience.publishAcoustics(serverLevel, worldPosition,
-                    com.nachtraben.soundstage.core.SpeakerAcoustics.forBlockPath(path));
-            com.nachtraben.soundstage.audio.SpeakerAudience.publishVolume(serverLevel, worldPosition,
+            SpeakerAudience.publishAcoustics(serverLevel, worldPosition,
+                    SpeakerAcoustics.forBlockPath(path));
+            SpeakerAudience.publishVolume(serverLevel, worldPosition,
                     settingsPublicationId, volumePercent);
-            com.nachtraben.soundstage.audio.SpeakerAudience.publishChannel(serverLevel, worldPosition,
+            SpeakerAudience.publishChannel(serverLevel, worldPosition,
                     settingsPublicationId, channelMode);
         }
     }
@@ -359,14 +370,14 @@ public class SpeakerBlockEntity extends BlockEntity implements dev.armadeus.arma
             renderCache.close();
         }
         if (level != null && !level.isClientSide()) {
-            com.nachtraben.soundstage.audio.SpeakerAudience.forget(level, getBlockPos());
-            String path = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+            SpeakerAudience.forget(level, getBlockPos());
+            String path = BuiltInRegistries.BLOCK
                     .getKey(getBlockState().getBlock()).getPath();
-            com.nachtraben.soundstage.audio.SpeakerAudience.forgetAcoustics(level, getBlockPos(),
-                    com.nachtraben.soundstage.core.SpeakerAcoustics.forBlockPath(path));
-            com.nachtraben.soundstage.audio.SpeakerAudience.forgetVolume(
+            SpeakerAudience.forgetAcoustics(level, getBlockPos(),
+                    SpeakerAcoustics.forBlockPath(path));
+            SpeakerAudience.forgetVolume(
                     level, getBlockPos(), settingsPublicationId);
-            com.nachtraben.soundstage.audio.SpeakerAudience.forgetChannel(
+            SpeakerAudience.forgetChannel(
                     level, getBlockPos(), settingsPublicationId);
         }
     }
@@ -374,7 +385,7 @@ public class SpeakerBlockEntity extends BlockEntity implements dev.armadeus.arma
     @Nullable
     @Override
     public ClientboundBlockEntityDataPacket getUpdatePacket() {
-        return net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket.create(this);
+        return ClientboundBlockEntityDataPacket.create(this);
     }
 
     @Override

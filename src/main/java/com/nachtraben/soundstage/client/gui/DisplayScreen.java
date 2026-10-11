@@ -1,12 +1,5 @@
 package com.nachtraben.soundstage.client.gui;
 
-import dev.armadeus.armalib.core.ui.Theme;
-import dev.armadeus.armalib.ui.UiButton;
-import dev.armadeus.armalib.ui.UiGraphics;
-import dev.armadeus.armalib.ui.UiIcon;
-import dev.armadeus.armalib.ui.UiScreen;
-import dev.armadeus.armalib.ui.UiSegmented;
-import dev.armadeus.armalib.ui.UiSwitch;
 import com.nachtraben.soundstage.block.ScreenBlock;
 import com.nachtraben.soundstage.block.ScreenBlockEntity;
 import com.nachtraben.soundstage.config.AppearanceSettings;
@@ -14,10 +7,18 @@ import com.nachtraben.soundstage.config.SoundstageAppearance;
 import com.nachtraben.soundstage.core.video.DisplayLayout;
 import com.nachtraben.soundstage.network.DisplayUnlinkC2SPacket;
 import com.nachtraben.soundstage.network.ScreenFitModeC2SPacket;
+import dev.armadeus.armalib.core.ui.Theme;
 import dev.armadeus.armalib.platform.client.ClientNetwork;
+import dev.armadeus.armalib.ui.UiButton;
+import dev.armadeus.armalib.ui.UiGraphics;
+import dev.armadeus.armalib.ui.UiIcon;
+import dev.armadeus.armalib.ui.UiScreen;
+import dev.armadeus.armalib.ui.UiSegmented;
+import dev.armadeus.armalib.ui.UiSwitch;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.Level;
 
 import java.util.List;
 
@@ -79,7 +80,7 @@ public class DisplayScreen extends UiScreen {
     }
 
     private ScreenBlockEntity.FitMode readAnchorFitMode(Direction facing) {
-        net.minecraft.world.level.Level level = screen.getLevel();
+        Level level = screen.getLevel();
         if (level == null) return ScreenBlockEntity.FitMode.FIT;
         DisplayLayout layout = ScreenBlockEntity.findDisplay(level, screen.getBlockPos(), facing);
         BlockPos anchorPos = ScreenBlockEntity.anchorPosition(screen.getBlockPos(), facing, layout);

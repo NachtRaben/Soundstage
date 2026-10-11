@@ -1,7 +1,9 @@
 package com.nachtraben.soundstage.core;
 
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -95,8 +97,8 @@ public final class UrlPolicy {
         }
         if (bytes.length == 16 && embedsIpv4(bytes)) {
             try {
-                return isPubliclyRoutable(InetAddress.getByAddress(java.util.Arrays.copyOfRange(bytes, 12, 16)));
-            } catch (java.net.UnknownHostException impossible) {
+                return isPubliclyRoutable(InetAddress.getByAddress(Arrays.copyOfRange(bytes, 12, 16)));
+            } catch (UnknownHostException impossible) {
                 return false;
             }
         }

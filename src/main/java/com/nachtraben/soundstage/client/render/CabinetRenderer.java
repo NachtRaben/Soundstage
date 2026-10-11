@@ -6,18 +6,14 @@ import com.nachtraben.soundstage.SoundstageInit;
 import com.nachtraben.soundstage.block.speaker.SpeakerFinish;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.RandomSource;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.TreeSet;
 
 final class CabinetRenderer {
     private CabinetRenderer() {}
@@ -43,7 +39,6 @@ final class CabinetRenderer {
 
     static void render(Layout layout, SpeakerFinish finish, boolean grilleOn, Hole[] holes,
                        PoseStack poseStack, GeometrySink sink, int light, int overlay) {
-        if (RenderPreview.wooferMechanismOnly) return;
         TextureAtlasSprite wood = sideSprite(finish.casingBlock());
         TextureAtlasSprite wool = sideSprite(finish.grilleBlock());
         boolean clear = finish.isTransparent();
@@ -68,6 +63,43 @@ final class CabinetRenderer {
                 clearFrame(pose, consumer, layout, light, overlay);
             }
         }));
+    }
+
+    static void clearBoxEdges(PoseStack.Pose pose, VertexConsumer c, float x0, float y0, float z0, float x1,
+                              float y1, float z1, float e, int light, int overlay) {
+        for (int iy = 0; iy < 2; iy++) {
+            float ya = iy == 0 ? y0 : y1 - e, yb = iy == 0 ? y0 + e : y1;
+            for (int iz = 0; iz < 2; iz++) {
+                float za = iz == 0 ? z0 : z1 - e, zb = iz == 0 ? z0 + e : z1;
+                edgeBar(pose, c, x0, ya, za, x1, yb, zb, light, overlay);
+            }
+        }
+        for (int ix = 0; ix < 2; ix++) {
+            float xa = ix == 0 ? x0 : x1 - e, xb = ix == 0 ? x0 + e : x1;
+            for (int iz = 0; iz < 2; iz++) {
+                float za = iz == 0 ? z0 : z1 - e, zb = iz == 0 ? z0 + e : z1;
+                edgeBar(pose, c, xa, y0 + e, za, xb, y1 - e, zb, light, overlay);
+            }
+            for (int iy = 0; iy < 2; iy++) {
+                float ya = iy == 0 ? y0 : y1 - e, yb = iy == 0 ? y0 + e : y1;
+                edgeBar(pose, c, xa, ya, z0 + e, xb, yb, z1 - e, light, overlay);
+            }
+        }
+    }
+
+    static void renderClearBoxPanes(SpeakerFinish finish, float x0, float y0, float z0, float x1, float y1, float z1,
+                                    float e, boolean back, GeometrySink sink, int light, int overlay) {
+        int rgb = paneRgb(finish);
+        int alpha = paneAlpha(finish);
+        sink.emit(SoundstageRenderTypes.glass(FLAT_TEXTURE), (pose, c) -> {
+            float ix0 = x0 + e, ix1 = x1 - e, iy0 = y0 + e, iy1 = y1 - e, iz0 = z0 + e, iz1 = z1 - e;
+            pane(pose, c, x0, iy0, iz0, x0, iy1, iz1, -1, 0, 0, rgb, alpha, light, overlay);
+            pane(pose, c, x1, iy0, iz0, x1, iy1, iz1, 1, 0, 0, rgb, alpha, light, overlay);
+            pane(pose, c, ix0, y1, iz0, ix1, y1, iz1, 0, 1, 0, rgb, alpha, light, overlay);
+            pane(pose, c, ix0, y0, iz0, ix1, y0, iz1, 0, -1, 0, rgb, alpha, light, overlay);
+            pane(pose, c, ix0, iy0, z0, ix1, iy1, z0, 0, 0, -1, rgb, alpha, light, overlay);
+            if (back) pane(pose, c, ix0, iy0, z1, ix1, iy1, z1, 0, 0, 1, rgb, alpha, light, overlay);
+        });
     }
 
     private static int paneRgb(SpeakerFinish finish) {
@@ -147,7 +179,6 @@ final class CabinetRenderer {
     static void renderClearCasing(Layout layout, SpeakerFinish finish,
                                   GeometrySink sink, int light, int overlay) {
         if (!finish.isTransparent()) return;
-        if (RenderPreview.suppressBlendedPasses) return;
         int rgb = paneRgb(finish);
         int alpha = paneAlpha(finish);
         sink.emit(SoundstageRenderTypes.glass(FLAT_TEXTURE), (pose, consumer) ->
@@ -159,13 +190,13 @@ final class CabinetRenderer {
         float bx0 = l.x0() + l.frame(), bx1 = l.x1() - l.frame();
         float by0 = l.y0() + l.frame(), by1 = l.y1() - l.frame();
         float bz = at(l.baffleZ());
-        java.util.TreeSet<Float> xs = new java.util.TreeSet<>(java.util.List.of(bx0, bx1));
-        java.util.TreeSet<Float> ys = new java.util.TreeSet<>(java.util.List.of(by0, by1));
+        TreeSet<Float> xs = new TreeSet<>(List.of(bx0, bx1));
+        TreeSet<Float> ys = new TreeSet<>(List.of(by0, by1));
         for (Hole h : holes) {
-            xs.add(net.minecraft.util.Mth.clamp(h.x() - h.bound(), bx0, bx1));
-            xs.add(net.minecraft.util.Mth.clamp(h.x() + h.bound(), bx0, bx1));
-            ys.add(net.minecraft.util.Mth.clamp(h.y() - h.bound(), by0, by1));
-            ys.add(net.minecraft.util.Mth.clamp(h.y() + h.bound(), by0, by1));
+            xs.add(Mth.clamp(h.x() - h.bound(), bx0, bx1));
+            xs.add(Mth.clamp(h.x() + h.bound(), bx0, bx1));
+            ys.add(Mth.clamp(h.y() - h.bound(), by0, by1));
+            ys.add(Mth.clamp(h.y() + h.bound(), by0, by1));
         }
         Float[] xa = xs.toArray(new Float[0]);
         Float[] ya = ys.toArray(new Float[0]);
@@ -202,7 +233,7 @@ final class CabinetRenderer {
             Mesh.Point2 p = Mesh.roundedPoint(angle, h.inner());
             return new float[]{p.x(), p.y()};
         }
-        return new float[]{net.minecraft.util.Mth.cos(angle) * h.inner(), net.minecraft.util.Mth.sin(angle) * h.inner()};
+        return new float[]{Mth.cos(angle) * h.inner(), Mth.sin(angle) * h.inner()};
     }
 
     private static float[] squarePoint(Hole h, float[] inner) {
@@ -271,8 +302,10 @@ final class CabinetRenderer {
     private static void box(PoseStack.Pose pose, VertexConsumer c, TextureAtlasSprite s,
                             float x0, float y0, float z0, float x1, float y1, float z1,
                             int light, int overlay) {
-        face(pose, c, s, x1, y0, z0, x1, y1, z0, x0, y1, z0, x0, y0, z0, 16 - x1, 16 - y1, 16 - x0, 16 - y0, 0, 0, -1, light, overlay);
-        face(pose, c, s, x0, y0, z1, x0, y1, z1, x1, y1, z1, x1, y0, z1, x0, 16 - y1, x1, 16 - y0, 0, 0, 1, light, overlay);
+        face(pose, c, s, x1, y0, z0, x1, y1, z0, x0, y1, z0, x0, y0, z0, 16 - x1, 16 - y1, 16 - x0, 16 - y0, 0, 0, -1,
+                light, overlay);
+        face(pose, c, s, x0, y0, z1, x0, y1, z1, x1, y1, z1, x1, y0, z1, x0, 16 - y1, x1, 16 - y0, 0, 0, 1,
+                light, overlay);
         face(pose, c, s, x1, y0, z0, x1, y1, z0, x1, y1, z1, x1, y0, z1, z0, y0, z1, y1, 1, 0, 0, light, overlay);
         face(pose, c, s, x0, y0, z1, x0, y1, z1, x0, y1, z0, x0, y0, z0, z0, y0, z1, y1, -1, 0, 0, light, overlay);
         face(pose, c, s, x0, y1, z0, x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, z0, x1, z1, 0, 1, 0, light, overlay);

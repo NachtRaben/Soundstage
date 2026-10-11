@@ -9,7 +9,8 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 public class LiveAudioC2SPacket implements CustomPacketPayload {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "live_audio_c2s");
+    public static final ResourceLocation ID =
+            ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "live_audio_c2s");
     public static final Type<LiveAudioC2SPacket> TYPE = new Type<>(ID);
     public static final StreamCodec<FriendlyByteBuf, LiveAudioC2SPacket> STREAM_CODEC = StreamCodec.ofMember(
             LiveAudioC2SPacket::write, LiveAudioC2SPacket::new);

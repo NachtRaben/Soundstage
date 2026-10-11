@@ -1,22 +1,23 @@
 package com.nachtraben.soundstage.client.gui;
 
+import com.nachtraben.soundstage.core.video.MediaListing;
+import com.nachtraben.soundstage.network.MediaBrowseReplyS2CPacket;
+import com.nachtraben.soundstage.network.MediaBrowseRequestC2SPacket;
+import com.nachtraben.soundstage.network.SpeakerControlC2SPacket;
 import dev.armadeus.armalib.core.ui.Theme;
+import dev.armadeus.armalib.platform.client.ClientNetwork;
 import dev.armadeus.armalib.ui.ScrollingText;
 import dev.armadeus.armalib.ui.UiDraw;
 import dev.armadeus.armalib.ui.UiGraphics;
 import dev.armadeus.armalib.ui.UiIcon;
 import dev.armadeus.armalib.ui.UiScreen;
 import dev.armadeus.armalib.ui.UiText;
-import com.nachtraben.soundstage.core.video.MediaListing;
-import com.nachtraben.soundstage.network.MediaBrowseReplyS2CPacket;
-import com.nachtraben.soundstage.network.MediaBrowseRequestC2SPacket;
-import com.nachtraben.soundstage.network.SpeakerControlC2SPacket;
-import dev.armadeus.armalib.platform.client.ClientNetwork;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 
 import java.util.List;
 
@@ -46,7 +47,8 @@ public class MediaBrowseScreen extends UiScreen {
     private final ScrollingText hoveredRowLine = new ScrollingText();
 
     public MediaBrowseScreen(BlockPos pos, Screen parentScreen) {
-        super(Component.translatable("gui.soundstage.browse.title"), UiIcon.FOLDER, THEME, null, WINDOW_WIDTH, WINDOW_HEIGHT);
+        super(Component.translatable("gui.soundstage.browse.title"), UiIcon.FOLDER, THEME, null, WINDOW_WIDTH,
+                WINDOW_HEIGHT);
         this.pos = pos;
         this.parentScreen = parentScreen;
     }
@@ -120,7 +122,7 @@ public class MediaBrowseScreen extends UiScreen {
         } else {
             int maxVisible = listBottom - listY;
             this.maxScroll = Math.max(0, this.filtered.size() * ROW_HEIGHT - maxVisible);
-            this.scrollOffset = net.minecraft.util.Mth.clamp(this.scrollOffset, 0, this.maxScroll);
+            this.scrollOffset = Mth.clamp(this.scrollOffset, 0, this.maxScroll);
 
             int yOffset = listY - (int) this.scrollOffset;
             for (String name : this.filtered) {
@@ -129,11 +131,13 @@ public class MediaBrowseScreen extends UiScreen {
                             && mouseY >= yOffset && mouseY < yOffset + (ROW_HEIGHT - 1)
                             && mouseY >= listY && mouseY < listBottom;
                     if (rowHovered) {
-                        UiDraw.roundRect(g, rowLeft, yOffset, rowRight - rowLeft, ROW_HEIGHT - 1, 3, THEME.surfaceHover());
+                        UiDraw.roundRect(g, rowLeft, yOffset, rowRight - rowLeft, ROW_HEIGHT - 1, 3,
+                                THEME.surfaceHover());
                         anyRowHovered = true;
                         hoveredRowLine.draw(g, this.font, name, Component.literal(name),
                                 rowLeft + 4, yOffset + 2, rowRight - rowLeft - 24, THEME.text());
-                        UiDraw.iconCentred(g, UiIcon.PLUS, rowRight - 9, yOffset + (ROW_HEIGHT - 1) / 2.0, 8, THEME.accent());
+                        UiDraw.iconCentred(g, UiIcon.PLUS, rowRight - 9, yOffset + (ROW_HEIGHT - 1) / 2.0, 8,
+                                THEME.accent());
                     } else {
                         g.text(this.font, UiText.ellipsize(this.font, name, rowRight - rowLeft - 8),
                                 rowLeft + 4, yOffset + 2, THEME.text());
@@ -153,7 +157,7 @@ public class MediaBrowseScreen extends UiScreen {
         if (mouseY < listTop() || mouseY > listBottom()) {
             return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
-        this.scrollOffset = net.minecraft.util.Mth.clamp(this.scrollOffset - scrollY * ROW_HEIGHT, 0, this.maxScroll);
+        this.scrollOffset = Mth.clamp(this.scrollOffset - scrollY * ROW_HEIGHT, 0, this.maxScroll);
         return true;
     }
 
@@ -174,7 +178,8 @@ public class MediaBrowseScreen extends UiScreen {
         int listY = listTop();
         int listBottom = listBottom();
         int rowLeft = panelX() + 12, rowRight = panelX() + WINDOW_WIDTH - 12;
-        if (!this.filtered.isEmpty() && mouseY >= listY && mouseY < listBottom && mouseX >= rowLeft && mouseX < rowRight) {
+        if (!this.filtered.isEmpty() && mouseY >= listY && mouseY < listBottom && mouseX >= rowLeft
+                && mouseX < rowRight) {
             int yOffset = listY - (int) this.scrollOffset;
             for (String name : this.filtered) {
                 if (mouseY >= yOffset && mouseY < yOffset + (ROW_HEIGHT - 1)) {

@@ -2,11 +2,11 @@ package com.nachtraben.soundstage.block.speaker;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.nachtraben.soundstage.SoundstageInit;
+import dev.armadeus.armalib.platform.block.SaveView;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import dev.armadeus.armalib.platform.block.SaveView;
-import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
@@ -33,7 +33,7 @@ public record SpeakerFinish(ResourceLocation casing, ResourceLocation grille) {
 
     public static final TagKey<Block> CASING_MATERIALS =
             TagKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(
-                    com.nachtraben.soundstage.SoundstageInit.MODID, "speaker_casing"));
+                    SoundstageInit.MODID, "speaker_casing"));
 
     public static boolean isCasingMaterial(Block block) {
         return block.builtInRegistryHolder().is(CASING_MATERIALS);

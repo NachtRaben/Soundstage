@@ -43,8 +43,12 @@ public final class FfmpegArchive {
         }
         Path ffmpeg = into.resolve("bin").resolve(build.ffmpegName());
         Path ffprobe = into.resolve("bin").resolve(build.ffprobeName());
-        if (!Files.isRegularFile(ffmpeg, LinkOption.NOFOLLOW_LINKS)) throw new IOException("the archive holds no " + build.ffmpegName());
-        if (!Files.isRegularFile(ffprobe, LinkOption.NOFOLLOW_LINKS)) throw new IOException("the archive holds no " + build.ffprobeName());
+        if (!Files.isRegularFile(ffmpeg, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("the archive holds no " + build.ffmpegName());
+        }
+        if (!Files.isRegularFile(ffprobe, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("the archive holds no " + build.ffprobeName());
+        }
         if (!build.windows()) {
             executable(ffmpeg);
             executable(ffprobe);
@@ -144,8 +148,12 @@ public final class FfmpegArchive {
             for (int n; (n = in.read(buffer)) >= 0; ) {
                 written += n;
                 total[0] += n;
-                if (written > MAX_FILE_BYTES) throw new IOException(target.getFileName() + " is larger than any ffmpeg file");
-                if (total[0] > MAX_TOTAL_BYTES) throw new IOException("the archive unpacks larger than any ffmpeg build");
+                if (written > MAX_FILE_BYTES) {
+                    throw new IOException(target.getFileName() + " is larger than any ffmpeg file");
+                }
+                if (total[0] > MAX_TOTAL_BYTES) {
+                    throw new IOException("the archive unpacks larger than any ffmpeg build");
+                }
                 out.write(buffer, 0, n);
             }
         }
@@ -153,7 +161,8 @@ public final class FfmpegArchive {
     }
 
     private static void executable(Path file) throws IOException {
-        PosixFileAttributeView view = Files.getFileAttributeView(file, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+        PosixFileAttributeView view =
+                Files.getFileAttributeView(file, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
         if (view != null) view.setPermissions(PosixFilePermissions.fromString("rwxr-xr-x"));
     }
 }

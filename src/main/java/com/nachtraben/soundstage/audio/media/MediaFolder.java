@@ -2,6 +2,8 @@ package com.nachtraben.soundstage.audio.media;
 
 import com.nachtraben.soundstage.core.video.MediaListing;
 import com.nachtraben.soundstage.core.video.MediaNames;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -15,7 +17,7 @@ public final class MediaFolder {
 
     public static final String DIRECTORY = "soundstage-media";
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     private static volatile Path root;
 

@@ -2,6 +2,17 @@ package com.nachtraben.soundstage.client.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.logging.LogUtils;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import org.joml.Matrix3f;
+import org.joml.Vector3f;
+import org.slf4j.Logger;
+
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.WeakHashMap;
 //? if >=1.21 {
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 //?}
@@ -21,18 +32,17 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.BiConsumer;
 
 public final class StaticMesh {
 
-    static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
+    static final Logger LOGGER = LogUtils.getLogger();
 
     private static final class NoOverlay {
         static final int U =
-                net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY & 0xFFFF;
+                OverlayTexture.NO_OVERLAY & 0xFFFF;
         static final int V =
-                net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY >> 16;
+                OverlayTexture.NO_OVERLAY >> 16;
 
         private NoOverlay() {}
     }
@@ -41,7 +51,7 @@ public final class StaticMesh {
     //? if >=1.21.11 {
     /*private static final org.joml.Vector3f DISPLACEMENT = new org.joml.Vector3f();
     *///?}
-    private static final org.joml.Vector3f REPLAY_NORMAL = new org.joml.Vector3f();
+    private static final Vector3f REPLAY_NORMAL = new Vector3f();
 
     private static final int BAKE_BUFFER_BYTES = 4 << 20;
 
@@ -131,19 +141,11 @@ public final class StaticMesh {
     private static final List<Baked> RETIRED = new ArrayList<>();
 
     private static void retire(Baked baked) {
-        if (!com.nachtraben.soundstage.RigStaging.fault("retire-at-once")
-                && DEFERRED.stream().anyMatch(pending -> drawsFrom(pending, baked))) {
+        if (DEFERRED.stream().anyMatch(pending -> drawsFrom(pending, baked))) {
             RETIRED.add(baked);
-            retiredCount++;
         } else {
             baked.close();
         }
-    }
-
-    private static long retiredCount;
-
-    public static long retirements() {
-        return retiredCount;
     }
 
     private static boolean drawsFrom(Pending pending, Baked baked) {
@@ -159,7 +161,7 @@ public final class StaticMesh {
         *///?} else {
         final Map<RenderType, VertexBuffer> buffers = new LinkedHashMap<>();
         final Map<RenderType, VertexBuffer> restDeforming = new LinkedHashMap<>();
-        final java.util.Set<RenderType> noDeformSource = new java.util.HashSet<>();
+        final Set<RenderType> noDeformSource = new HashSet<>();
         //?}
         final Map<RenderType, List<Vertex>> recorded = new LinkedHashMap<>();
         final Map<RenderType, DisplacementPass.Source> deformSources = new LinkedHashMap<>();
@@ -175,8 +177,8 @@ public final class StaticMesh {
         }
     }
 
-    private static final java.util.Set<StaticMesh> LIVE =
-            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    private static final Set<StaticMesh> LIVE =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
     private boolean registered;
 
@@ -184,7 +186,7 @@ public final class StaticMesh {
         recycle(DEFERRED);
         recycle(OPAQUE_DEFERRED);
         FEEDBACK_SOURCES.clear();
-        for (StaticMesh mesh : java.util.List.copyOf(LIVE)) {
+        for (StaticMesh mesh : List.copyOf(LIVE)) {
             mesh.close();
         }
         LIVE.clear();
@@ -195,11 +197,11 @@ public final class StaticMesh {
     private static int baking;
 
     private static boolean mustBuildLive() {
-        return baking > 0 || RenderPreview.bypassGeometryCache;
+        return baking > 0;
     }
 
     private static boolean mustReplay() {
-        return IrisCompat.isShaderPackInUse() || !deferralAvailable || RenderPreview.forceRecordedReplay;
+        return IrisCompat.isShaderPackInUse() || !deferralAvailable;
     }
 
     //? if <1.21.11 {
@@ -231,7 +233,8 @@ public final class StaticMesh {
     private static void deferTranslated(Baked baked, PoseStack.Pose pose, float displacement) {
         if (baked.buffers.isEmpty()) return;
         for (var entry : baked.buffers.entrySet()) {
-            Pending queued = pending(SoundstageRenderTypes.undisplaced(entry.getKey()), entry.getValue(), pose, 1f, 1f, 1f);
+            Pending queued =
+                    pending(SoundstageRenderTypes.undisplaced(entry.getKey()), entry.getValue(), pose, 1f, 1f, 1f);
             queued.modelView.translate(0f, 0f, displacement);
             DEFERRED.add(queued);
         }
@@ -241,7 +244,7 @@ public final class StaticMesh {
                        BiConsumer<PoseStack, GeometrySink> builder) {
         if (mustBuildLive()) {
             //? if <1.21.11 {
-            if (baking == 0 && !mustReplay() && !RenderPreview.forceRecordedReplay && levelSourceIsBuffered()) {
+            if (baking == 0 && !mustReplay() && levelSourceIsBuffered()) {
                 Baked fresh = bake(builder, Form.BUFFERS);
                 drawBuffers(fresh, poseStack.last());
                 fresh.close();
@@ -249,10 +252,6 @@ public final class StaticMesh {
             }
             //?}
             builder.accept(poseStack, liveSink);
-            return;
-        }
-        if (RenderPreview.forceRecordedReplay) {
-            replay(cached(key, Form.RECORDED, builder), poseStack.last(), liveSink);
             return;
         }
         if (IrisCompat.isShaderPackInUse()) {
@@ -287,7 +286,7 @@ public final class StaticMesh {
             return;
         }
         //? if >=1.21.11 && <26.1 {
-        /*if (IrisCompat.isShaderPackInUse() && deferralAvailable && !RenderPreview.forceRecordedReplay && mayDefer()) {
+        /*if (IrisCompat.isShaderPackInUse() && deferralAvailable && mayDefer()) {
             defer(cached(key, Form.BUFFERS, builder), poseStack.last(), tintR, tintG, tintB);
             return;
         }
@@ -380,7 +379,7 @@ public final class StaticMesh {
         private VertexBuffer buffer;
         //?}
         private final Matrix4f modelView = new Matrix4f();
-        private final org.joml.Matrix3f normal = new org.joml.Matrix3f();
+        private final Matrix3f normal = new Matrix3f();
         private float r = 1f, g = 1f, b = 1f;
         private DisplacementPass.Source deformSource;
         private float displacement;
@@ -402,7 +401,7 @@ public final class StaticMesh {
             return modelView;
         }
 
-        org.joml.Matrix3f normal() {
+        Matrix3f normal() {
             return normal;
         }
 
@@ -431,17 +430,19 @@ public final class StaticMesh {
         }
     }
 
-    private static final java.util.ArrayDeque<Pending> PENDING_POOL = new java.util.ArrayDeque<>();
+    private static final ArrayDeque<Pending> PENDING_POOL = new ArrayDeque<>();
 
     //? if >=1.21.11 {
-    /*private static Pending pending(RenderType type, RetainedMesh buffer, PoseStack.Pose pose, float r, float g, float b) {
+    /*private static Pending pending(RenderType type, RetainedMesh buffer, PoseStack.Pose pose, float r,
+                                     float g, float b) {
         Pending entry = PENDING_POOL.pollLast();
         if (entry == null) entry = new Pending();
         entry.type = type;
         entry.buffer = buffer;
         entry.modelView.set(RenderSystem.getModelViewStack()).mul(pose.pose());
     *///?} else {
-    private static Pending pending(RenderType type, VertexBuffer buffer, PoseStack.Pose pose, float r, float g, float b) {
+    private static Pending pending(RenderType type, VertexBuffer buffer, PoseStack.Pose pose, float r,
+                                   float g, float b) {
         Pending entry = PENDING_POOL.pollLast();
         if (entry == null) entry = new Pending();
         entry.type = type;
@@ -485,18 +486,10 @@ public final class StaticMesh {
         if (type != null && !batch.isEmpty()) RetainedMesh.drawBatch(type, batch);
         batch.clear();
     }
-
-    private static org.joml.Matrix3f lightsTurnedBy(org.joml.Matrix3f normal) {
-        return com.nachtraben.soundstage.RigStaging.fault("unturned-lights") ? null : normal;
-    }
     *///?}
 
     public static void flushDeferred() {
-        displacementFrames++;
-        displacementValueTotal += FRAME_DISPLACEMENTS.size();
-        FRAME_DISPLACEMENTS.clear();
         if (DEFERRED.isEmpty() && OPAQUE_DEFERRED.isEmpty()) return;
-        long startedAt = System.nanoTime();
         Object previousPhase = IrisCompat.enterBlockEntityPhase();
         //? if >=1.21.11 {
         /*try {
@@ -504,26 +497,22 @@ public final class StaticMesh {
             RenderType batchType = null;
             List<RetainedMesh.Entry> batch = new ArrayList<>();
             for (Pending pending : OPAQUE_DEFERRED) {
-                drawCount++;
                 if (batchType != pending.type()) {
                     flushBatch(batchType, batch);
                     batchType = pending.type();
                 }
-                batch.add(new RetainedMesh.Entry(pending.buffer(), pending.modelView(), pending.r(), pending.g(), pending.b(), 1f,
-                        new org.joml.Vector3f(0f, 0f, pending.displacement()), 0, lightsTurnedBy(pending.normal())));
+                batch.add(new RetainedMesh.Entry(pending.buffer(), pending.modelView(), pending.r(), pending.g(),
+                        pending.b(), 1f, new org.joml.Vector3f(0f, 0f, pending.displacement()), 0, pending.normal()));
             }
             flushBatch(batchType, batch);
             batchType = null;
             for (Pending pending : DEFERRED) {
-                drawCount++;
                 DisplacementPass.Source source = pending.deformSource();
                 if (source != null) {
                     if (source.isClosed()) continue;
-                    if (probeRequested) probe(pending);
                     RetainedMesh mesh;
                     int copy;
                     if (source.displaced()) {
-                        feedbackDraws++;
                         mesh = source.copies();
                         copy = pending.slot();
                     } else {
@@ -534,7 +523,8 @@ public final class StaticMesh {
                         flushBatch(batchType, batch);
                         batchType = pending.type();
                     }
-                    batch.add(new RetainedMesh.Entry(mesh, pending.modelView(), 1f, 1f, 1f, 1f, null, copy, lightsTurnedBy(pending.normal())));
+                    batch.add(new RetainedMesh.Entry(mesh, pending.modelView(), 1f, 1f, 1f, 1f, null, copy,
+                            pending.normal()));
                     continue;
                 }
                 if (pending.buffer() != null) {
@@ -542,8 +532,8 @@ public final class StaticMesh {
                         flushBatch(batchType, batch);
                         batchType = pending.type();
                     }
-                    batch.add(new RetainedMesh.Entry(pending.buffer(), pending.modelView(), pending.r(), pending.g(), pending.b(), 1f, null, 0,
-                            lightsTurnedBy(pending.normal())));
+                    batch.add(new RetainedMesh.Entry(pending.buffer(), pending.modelView(), pending.r(), pending.g(),
+                            pending.b(), 1f, null, 0, pending.normal()));
                 }
             }
             flushBatch(batchType, batch);
@@ -552,7 +542,6 @@ public final class StaticMesh {
             FEEDBACK_SOURCES.clear();
             recycle(OPAQUE_DEFERRED);
             IrisCompat.restorePhase(previousPhase);
-            drawNanos += System.nanoTime() - startedAt;
             recycle(DEFERRED);
             RETIRED.forEach(Baked::close);
             RETIRED.clear();
@@ -568,14 +557,14 @@ public final class StaticMesh {
                     pending.type().setupRenderState();
                     current = pending.type();
                 }
-                drawCount++;
                 RenderSystem.setShaderColor(pending.r(), pending.g(), pending.b(), 1.0f);
                 if (pending.deformSource() != null) {
                     drawDisplaced(pending, projection);
                     continue;
                 }
                 pending.buffer().bind();
-                drawLit(pending.buffer(), pending.type(), pending.modelView(), projection, RenderSystem.getShader(), pending.normal());
+                drawLit(pending.buffer(), pending.type(), pending.modelView(), projection, RenderSystem.getShader(),
+                        pending.normal());
             }
         } finally {
             RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -584,7 +573,6 @@ public final class StaticMesh {
             IrisCompat.restorePhase(previousPhase);
             FEEDBACK_SOURCES.forEach(DisplacementPass.Source::endFrame);
             FEEDBACK_SOURCES.clear();
-            drawNanos += System.nanoTime() - startedAt;
             recycle(DEFERRED);
             RETIRED.forEach(Baked::close);
             RETIRED.clear();
@@ -596,8 +584,6 @@ public final class StaticMesh {
                                 PoseStack poseStack, GeometrySink liveSink,
                                 BiConsumer<PoseStack, GeometrySink> restBuilder,
                                 BiConsumer<PoseStack, GeometrySink> liveBuilder) {
-        displacedDrawCount++;
-        FRAME_DISPLACEMENTS.add(displacement);
         if (mustBuildLive()) {
             liveBuilder.accept(poseStack, liveSink);
             return;
@@ -613,12 +599,11 @@ public final class StaticMesh {
             return;
         }
         Baked baked = cached(key, Form.BUFFERS, restBuilder);
-        if (displacement != 0f) programDraws++;
         if (!loggedDisplacedOnGpu) {
             loggedDisplacedOnGpu = true;
             LOGGER.info("Soundstage: driver suspension drawn by the displacement program");
         }
-        pendingDisplacement = com.nachtraben.soundstage.RigStaging.fault("no-travel") ? 0f : displacement;
+        pendingDisplacement = displacement;
         drawBuffers(baked, poseStack.last());
         pendingDisplacement = Float.NaN;
     }
@@ -626,12 +611,6 @@ public final class StaticMesh {
     private static float pendingDisplacement = Float.NaN;
 
     private static boolean loggedDisplacedOnGpu;
-
-    private static long programDraws;
-
-    public static long suspensionProgramDraws() {
-        return programDraws;
-    }
 
     private static void deferDeformed(Baked baked, PoseStack.Pose pose, float displacement) {
         //? if >=1.21.11 {
@@ -753,8 +732,6 @@ public final class StaticMesh {
         DisplacementPass.Source source = pending.deformSource();
         if (source.isClosed()) return;
         boolean displaced = source.displaced();
-        if (displaced) feedbackDraws++;
-        if (probeRequested) probe(pending);
         net.minecraft.client.renderer.ShaderInstance shader = RenderSystem.getShader();
         if (shader == null) {
             DisplacementPass.unbind();
@@ -778,24 +755,15 @@ public final class StaticMesh {
         shader.clear();
         DisplacementPass.unbind();
     }
-
-    private static void probe(Pending pending) {
-        probeRequested = false;
-        try {
-            probeResult = DisplacementPass.probe(pending.deformSource(), pending.slot(), pending.displacement());
-        } catch (Throwable t) {
-            LOGGER.warn("Soundstage: the suspension probe failed", t);
-            probeResult = new float[]{pending.displacement(), Float.NaN, 0f, 0f};
-        }
-    }
     //?}
 
     //? if <1.21.11 {
     private static void drawLit(VertexBuffer buffer, RenderType type, Matrix4f modelView, Matrix4f projection,
-                                net.minecraft.client.renderer.ShaderInstance shader, org.joml.Matrix3f normal) {
+                                net.minecraft.client.renderer.ShaderInstance shader, Matrix3f normal) {
         if (shader == null) return;
         //? if >=1.21 {
-        shader.setDefaultUniforms(type.mode(), modelView, projection, net.minecraft.client.Minecraft.getInstance().getWindow());
+        shader.setDefaultUniforms(type.mode(), modelView, projection,
+                net.minecraft.client.Minecraft.getInstance().getWindow());
         //?} else {
         /*setDefaultUniforms(shader, modelView, projection);
         *///?}
@@ -805,15 +773,14 @@ public final class StaticMesh {
         shader.clear();
     }
 
-    private static final org.joml.Vector3f LIGHT = new org.joml.Vector3f();
+    private static final Vector3f LIGHT = new Vector3f();
 
-    private static void lightInMeshFrame(net.minecraft.client.renderer.ShaderInstance shader, org.joml.Matrix3f normal) {
-        if (com.nachtraben.soundstage.RigStaging.fault("unturned-lights")) return;
+    private static void lightInMeshFrame(net.minecraft.client.renderer.ShaderInstance shader, Matrix3f normal) {
         relight(shader.LIGHT0_DIRECTION, normal);
         relight(shader.LIGHT1_DIRECTION, normal);
     }
 
-    private static void relight(com.mojang.blaze3d.shaders.Uniform uniform, org.joml.Matrix3f normal) {
+    private static void relight(com.mojang.blaze3d.shaders.Uniform uniform, Matrix3f normal) {
         if (uniform == null) return;
         java.nio.FloatBuffer value = uniform.getFloatBuffer();
         normal.transformTranspose(LIGHT.set(value.get(0), value.get(1), value.get(2))).normalize();
@@ -847,18 +814,6 @@ public final class StaticMesh {
         RenderSystem.setupShaderLights(shader);
     }
     *///?}
-
-    public static long deformedBuilds() {
-        return 0;
-    }
-
-    public static long deformedVertices() {
-        return 0;
-    }
-
-    public static long deformedNanos() {
-        return 0;
-    }
 
     //? if <1.21.11 {
     private static DisplacementPass.Source uploadDeformSource(RenderType type, List<Vertex> vertices) {
@@ -915,27 +870,13 @@ public final class StaticMesh {
     }
     //?}
 
-    private static final java.util.Set<Float> FRAME_DISPLACEMENTS = new java.util.HashSet<>();
-    private static long displacementFrames;
-    private static long displacementValueTotal;
-    private static long displacedDrawCount;
-
-    public static double displacementValuesPerFrame() {
-        return displacementFrames == 0 ? 0 : displacementValueTotal / (double) displacementFrames;
-    }
-
-    public static long displacedDraws() {
-        return displacedDrawCount;
-    }
-
     private void drawBuffers(Baked baked, PoseStack.Pose pose) {
-        long startedAt = System.nanoTime();
-        meshDrawCount++;
         Matrix4f modelView = DRAW_MATRIX.set(RenderSystem.getModelViewMatrix()).mul(pose.pose());
         //? if >=1.21.11 {
-        /*org.joml.Vector3f offset = Float.isNaN(pendingDisplacement) ? null : DISPLACEMENT.set(0f, 0f, pendingDisplacement);
+        /*org.joml.Vector3f offset = Float.isNaN(pendingDisplacement) ? null
+                : DISPLACEMENT.set(0f, 0f, pendingDisplacement);
         for (Map.Entry<RenderType, RetainedMesh> entry : baked.buffers.entrySet()) {
-            RenderType type = SoundstageRenderTypes.drawnAs(entry.getKey());
+            RenderType type = entry.getKey();
             //? if >=26.2 {
             /^if (deferralAvailable) {
                 Pending queued = pending(type, entry.getValue(), pose, 1f, 1f, 1f);
@@ -944,14 +885,12 @@ public final class StaticMesh {
                 continue;
             }
             ^///?}
-            drawCount++;
-            entry.getValue().draw(type, modelView, 1f, 1f, 1f, 1f, offset, 0, lightsTurnedBy(pose.normal()));
+            entry.getValue().draw(type, modelView, 1f, 1f, 1f, 1f, offset, 0, pose.normal());
         }
         *///?} else {
         for (Map.Entry<RenderType, VertexBuffer> entry : baked.buffers.entrySet()) {
-            RenderType type = SoundstageRenderTypes.drawnAs(entry.getKey());
+            RenderType type = entry.getKey();
             VertexBuffer buffer = entry.getValue();
-            drawCount++;
             type.setupRenderState();
             var shader = RenderSystem.getShader();
             if (!Float.isNaN(pendingDisplacement) && shader != null) {
@@ -964,7 +903,6 @@ public final class StaticMesh {
             type.clearRenderState();
         }
         //?}
-        drawNanos += System.nanoTime() - startedAt;
     }
 
     private void replay(Baked baked, PoseStack.Pose pose, GeometrySink liveSink) {
@@ -972,24 +910,11 @@ public final class StaticMesh {
     }
 
     private void replay(Baked baked, PoseStack.Pose pose, GeometrySink liveSink, float displacement) {
-        meshDrawCount++;
-        replayCount++;
-        long startedAt = System.nanoTime();
-        try {
-            replayBody(baked, pose, liveSink, displacement);
-        } finally {
-            replayNanos += System.nanoTime() - startedAt;
-        }
-    }
-
-    private void replayBody(Baked baked, PoseStack.Pose pose, GeometrySink liveSink, float displacement) {
         boolean displaced = !Float.isNaN(displacement);
         float perWeight = displaced ? displacement / 255f : 0f;
-        boolean unturned = com.nachtraben.soundstage.RigStaging.fault("unturned-lights");
         for (Map.Entry<RenderType, List<Vertex>> entry : baked.recorded.entrySet()) {
             List<Vertex> vertices = entry.getValue();
             if (vertices.isEmpty()) continue;
-            replayVertexCount += vertices.size();
             RenderType type = displaced
                     ? SoundstageRenderTypes.undisplaced(entry.getKey())
                     : entry.getKey();
@@ -1003,8 +928,7 @@ public final class StaticMesh {
                                     displaced ? NoOverlay.V : v.overlayV)
                             .setUv2(v.lightU, v.lightV);
                     if (v.nx != lastNx || v.ny != lastNy || v.nz != lastNz) {
-                        if (unturned) REPLAY_NORMAL.set(v.nx, v.ny, v.nz);
-                        else emitPose.transformNormal(v.nx, v.ny, v.nz, REPLAY_NORMAL);
+                        emitPose.transformNormal(v.nx, v.ny, v.nz, REPLAY_NORMAL);
                         lastNx = v.nx;
                         lastNy = v.ny;
                         lastNz = v.nz;
@@ -1015,88 +939,7 @@ public final class StaticMesh {
         }
     }
 
-    private static volatile boolean probeRequested;
-    private static volatile float[] probeResult;
-    private static long feedbackDraws;
-
-    public static void requestSuspensionProbe() {
-        probeResult = null;
-        probeRequested = true;
-    }
-
-    public static float[] suspensionProbe() {
-        return probeResult;
-    }
-
-    //? if >=1.21.11 {
-    /*private static void probe(Pending pending) {
-        probeRequested = false;
-        try {
-            DisplacementPass.Probe answer = DisplacementPass.probe(pending.deformSource(), pending.slot(), pending.displacement());
-            probeResult = new float[]{answer.requested(), answer.applied(), answer.displaced() ? 1f : 0f, answer.vertices()};
-        } catch (Throwable t) {
-            LOGGER.warn("Soundstage: the suspension probe failed", t);
-            probeResult = new float[]{pending.displacement(), Float.NaN, 0f, 0f};
-        }
-    }
-    *///?}
-
-    public static long feedbackDraws() {
-        return feedbackDraws;
-    }
-
-    public static long feedbackPasses() {
-        return DisplacementPass.passes();
-    }
-
-    public static long feedbackNanos() {
-        return DisplacementPass.passNanos();
-    }
-
-    public static void setSuspensionFeedback(boolean enabled) {
-        DisplacementPass.setEnabled(enabled);
-    }
-
-    public static long bakes() {
-        return bakeCount;
-    }
-
     private static long bakeCount;
-
-    public static long draws() {
-        return drawCount;
-    }
-
-    public static long drawNanos() {
-        return drawNanos;
-    }
-
-    public static long meshDraws() {
-        return meshDrawCount;
-    }
-
-    private static long drawCount;
-
-    public static long drawCount() {
-        return drawCount;
-    }
-    private static long meshDrawCount;
-    private static long drawNanos;
-    private static long replayCount;
-    private static long replayVertexCount;
-    private static long replayNanos;
-
-    public static long replayNanos() {
-        return replayNanos;
-    }
-
-    public static long replays() {
-        return replayCount;
-    }
-
-    public static long replayedVertices() {
-        return replayVertexCount;
-    }
 
     private Baked bake(BiConsumer<PoseStack, GeometrySink> builder, Form form) {
         bakeCount++;
@@ -1248,7 +1091,7 @@ public final class StaticMesh {
                 }
             }
             if (!rigid) {
-                java.util.Collections.addAll(recorded, quad);
+                Collections.addAll(recorded, quad);
                 return;
             }
             for (Vertex v : quad) {

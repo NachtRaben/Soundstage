@@ -10,7 +10,8 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.ItemStack;
 
 public class ModTabs {
-    public static final Registrar<CreativeModeTab> TABS = Registrar.create(SoundstageInit.MODID, Registries.CREATIVE_MODE_TAB);
+    public static final Registrar<CreativeModeTab> TABS =
+            Registrar.create(SoundstageInit.MODID, Registries.CREATIVE_MODE_TAB);
 
     public static final RegistryEntry<CreativeModeTab> SOUNDSTAGE_TAB = TABS.register("soundstage_tab", () ->
         CreativeTabs.create(

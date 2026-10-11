@@ -2,13 +2,16 @@ package com.nachtraben.soundstage.client.video;
 
 import com.nachtraben.soundstage.client.audio.AudioDecoder;
 import com.nachtraben.soundstage.client.audio.ClientAudioReceiver;
+import com.nachtraben.soundstage.config.SoundstageAppearance;
 import com.nachtraben.soundstage.core.SpectrumBands;
 import com.nachtraben.soundstage.core.video.NowPlayingCardPainter;
+import dev.armadeus.armalib.ui.ArtworkCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.system.MemoryUtil;
+import org.slf4j.LoggerFactory;
 
 import java.awt.Font;
 import java.awt.image.BufferedImage;
@@ -49,7 +52,6 @@ public final class NowPlayingCards {
                                                             int displayHeightCells) {
         ClientDisplayInfo.Info info = ClientDisplayInfo.get(receiverPos);
         if (info == null) return null;
-        if (com.nachtraben.soundstage.RigStaging.fault("no-card")) return null;
         long now = System.nanoTime();
         double aspect = NowPlayingCardPainter.cardAspect(displayWidthCells, displayHeightCells);
         Card card = CARDS.computeIfAbsent(new Key(receiverPos, (int) Math.round(aspect * 1000)),
@@ -70,20 +72,11 @@ public final class NowPlayingCards {
             int tallest = Math.max(card.tallestAsking, displayHeightCells);
             card.tallestAsking = 0;
             card.update(receiverPos, info, tallest, now);
-            if (card.uploaded) card.framesShown++;
         }
         card.tallestAsking = Math.max(card.tallestAsking, displayHeightCells);
         return card.uploaded
                 ? new ClientVideoReceivers.Frame(card.textureId, card.width, card.height, Long.MIN_VALUE)
                 : null;
-    }
-
-    public static long framesShown(BlockPos receiverPos) {
-        long shown = 0;
-        for (Map.Entry<Key, Card> entry : CARDS.entrySet()) {
-            if (entry.getKey().receiver().equals(receiverPos)) shown += entry.getValue().framesShown;
-        }
-        return shown;
     }
 
     public static void tick() {
@@ -115,7 +108,7 @@ public final class NowPlayingCards {
                 }
             }
         } catch (Exception e) {
-            org.slf4j.LoggerFactory.getLogger("Soundstage").warn(
+            LoggerFactory.getLogger("Soundstage").warn(
                     "Soundstage: the now-playing card's font did not load ({}); using the platform's", e.toString());
         }
         if (font == null) font = new Font(Font.SANS_SERIF, Font.PLAIN, 12);
@@ -129,7 +122,6 @@ public final class NowPlayingCards {
         VideoTexture texture;
         int width, height;
         boolean uploaded;
-        long framesShown;
         int tallestAsking;
 
         int generation = Integer.MIN_VALUE;
@@ -156,7 +148,7 @@ public final class NowPlayingCards {
             ByteBuffer painted = ready.getAndSet(null);
             if (painted != null) {
                 if (texture == null) {
-                    texture = new VideoTexture();
+                    texture = VideoTexture.create();
                     Minecraft.getInstance().getTextureManager().register(textureId, texture);
                 }
                 if (painted.capacity() == width * height * 4) {
@@ -168,9 +160,9 @@ public final class NowPlayingCards {
             }
 
             if (!artworkApplied && info.artworkUrl() != null
-                    && com.nachtraben.soundstage.config.SoundstageAppearance.trackChangeToastArtwork()) {
-                BufferedImage image = dev.armadeus.armalib.ui.ArtworkCache.copyImage(info.artworkUrl());
-                dev.armadeus.armalib.ui.ArtworkCache.Art art = dev.armadeus.armalib.ui.ArtworkCache.get(info.artworkUrl());
+                    && SoundstageAppearance.trackChangeToastArtwork()) {
+                BufferedImage image = ArtworkCache.copyImage(info.artworkUrl());
+                ArtworkCache.Art art = ArtworkCache.get(info.artworkUrl());
                 if (image != null && art != null) {
                     var inside = art.content();
                     artwork = image.getSubimage(inside.x(), inside.y(), inside.width(), inside.height());
@@ -249,7 +241,7 @@ public final class NowPlayingCards {
                         if (orphanSpare != null) MemoryUtil.memFree(orphanSpare);
                     }
                 } catch (RuntimeException e) {
-                    org.slf4j.LoggerFactory.getLogger("Soundstage").warn("Soundstage: a now-playing card failed to paint", e);
+                    LoggerFactory.getLogger("Soundstage").warn("Soundstage: a now-playing card failed to paint", e);
                 } finally {
                     painting.set(false);
                 }

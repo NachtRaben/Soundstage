@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.MissingResourceException;
 import java.util.Optional;
 
 public final class SubtitleChoice {
@@ -73,7 +74,7 @@ public final class SubtitleChoice {
             Locale locale = new Locale(two);
             try {
                 ISO3.put(locale.getISO3Language(), locale.getDisplayLanguage(Locale.ENGLISH));
-            } catch (java.util.MissingResourceException ignored) {
+            } catch (MissingResourceException ignored) {
             }
         }
         ISO3.putIfAbsent("ger", "German");

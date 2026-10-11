@@ -25,7 +25,7 @@ public class AudioDSP {
             calculateCoefficients(frequency, q);
         }
     }
-    
+
     public synchronized void setType(FilterType newType, float frequency, float q) {
         this.type = newType;
         if (newType != FilterType.NONE) {
@@ -60,7 +60,7 @@ public class AudioDSP {
             a1 = -2 * cosW0;
             a2 = 1 - alpha;
         }
-        
+
         b0 /= a0;
         b1 /= a0;
         b2 /= a0;

@@ -7,11 +7,20 @@ import com.nachtraben.soundstage.block.ScreenBlock;
 import com.nachtraben.soundstage.block.ScreenBlockEntity;
 import com.nachtraben.soundstage.client.video.ClientSubtitles;
 import com.nachtraben.soundstage.client.video.ClientVideoReceivers;
+import com.nachtraben.soundstage.client.video.NowPlayingCards;
 import com.nachtraben.soundstage.config.SoundstageAppearance;
 import com.nachtraben.soundstage.core.video.DisplayLayout;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.resources.ResourceLocation;
+import org.joml.Vector3f;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 //? if <1.21.11 {
 import net.minecraft.client.renderer.MultiBufferSource;
 //?}
@@ -23,8 +32,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
-import net.minecraft.util.Mth;
-import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.NotNull;
 import org.joml.Matrix4f;
@@ -32,13 +39,14 @@ import org.joml.Matrix4f;
 import java.util.List;
 
 //? if >=1.21.11 {
-/*public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBlockEntity, BlockEntityState<ScreenBlockEntity>> {
+/*public class ScreenBlockEntityRenderer
+        implements BlockEntityRenderer<ScreenBlockEntity, BlockEntityState<ScreenBlockEntity>> {
 *///?} else {
 public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBlockEntity> {
 //?}
 
-    private static final java.util.Set<net.minecraft.core.BlockPos> CAPTION_ANNOUNCED =
-            java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final Set<BlockPos> CAPTION_ANNOUNCED =
+            ConcurrentHashMap.newKeySet();
 
     private static final float DEPTH_UNITS = 1f;
 
@@ -46,7 +54,7 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
 
     private static final float BEZEL_DEPTH_EPSILON = 0.004f;
 
-    private static final RenderType BEZEL_TYPE = SoundstageRenderTypes.entitySolid(net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS);
+    private static final RenderType BEZEL_TYPE = SoundstageRenderTypes.entitySolid(TextureAtlas.LOCATION_BLOCKS);
 
     private static final int CASING_RGB = 0x1E1E1E;
 
@@ -70,9 +78,10 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
     }
 
     @Override
-    public void extractRenderState(ScreenBlockEntity blockEntity, BlockEntityState<ScreenBlockEntity> state, float partialTick,
-                                   net.minecraft.world.phys.Vec3 camera,
-                                   net.minecraft.client.renderer.feature.ModelFeatureRenderer.@org.jetbrains.annotations.Nullable CrumblingOverlay breaking) {
+    public void extractRenderState(ScreenBlockEntity blockEntity, BlockEntityState<ScreenBlockEntity> state,
+            float partialTick, net.minecraft.world.phys.Vec3 camera,
+            net.minecraft.client.renderer.feature.ModelFeatureRenderer.@org.jetbrains.annotations.Nullable
+                    CrumblingOverlay breaking) {
         BlockEntityRenderer.super.extractRenderState(blockEntity, state, partialTick, camera, breaking);
         state.blockEntity = blockEntity;
         state.partialTick = partialTick;
@@ -87,7 +96,7 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
         net.minecraft.client.renderer.OrderedSubmitNodeCollector late = collector.order(1);
         CaptionOut captions = (stack, matrix, line, width) -> {
             //? if >=26.3 {
-            /^late.submitTextBackground(stack, -1f, CAPTION_BOX_TOP, width, CAPTION_BOX_BOTTOM, captionBoxColour(),
+            /^late.submitTextBackground(stack, -1f, CAPTION_BOX_TOP, width, CAPTION_BOX_BOTTOM, CAPTION_BOX,
                     Font.DisplayMode.NORMAL, RenderLight.FULL_BRIGHT);
             ^///?} else {
             late.submitCustomGeometry(stack, SoundstageRenderTypes.textBackground(),
@@ -106,14 +115,15 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
             if (IrisCompat.isRenderingShadows()) return;
             if (PENDING_CAPTIONS.size() >= MAX_PENDING_CAPTIONS) PENDING_CAPTIONS.clear();
             PENDING_CAPTIONS.add(new PendingCaption(
-                    new Matrix4f(com.mojang.blaze3d.systems.RenderSystem.getModelViewMatrix()).mul(matrix), line, width));
+                    new Matrix4f(com.mojang.blaze3d.systems.RenderSystem.getModelViewMatrix()).mul(matrix),
+                    line, width));
         };
         draw(blockEntity, poseStack, GeometrySinks.immediate(poseStack, bufferSource), captions, packedLight);
     }
 
     private record PendingCaption(Matrix4f modelView, FormattedCharSequence line, int width) {}
 
-    private static final List<PendingCaption> PENDING_CAPTIONS = new java.util.ArrayList<>();
+    private static final List<PendingCaption> PENDING_CAPTIONS = new ArrayList<>();
 
     private static MultiBufferSource.BufferSource captionBuffers;
 
@@ -158,7 +168,8 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
                 captionBox(caption.modelView(), box, caption.width());
                 box.finish();
                 *///?} else {
-                captionBox(caption.modelView(), buffers.getBuffer(SoundstageRenderTypes.textBackground()), caption.width());
+                captionBox(caption.modelView(), buffers.getBuffer(SoundstageRenderTypes.textBackground()),
+                        caption.width());
                 //?}
                 font.drawInBatch(caption.line(), 0, 0, CAPTION_COLOUR, false, caption.modelView(), buffers,
                         Font.DisplayMode.NORMAL, 0, RenderLight.FULL_BRIGHT);
@@ -176,12 +187,11 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
     }
     //?}
 
-    private static final double VIEW_MARGIN = 1.1;
-    private static final double CELL_RADIUS = 0.87;
+    private static final double FOV_MODIFIER_MAX = 1.5;
 
-    private static boolean inView(BlockPos pos) {
-        net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
-        net.minecraft.client.Camera camera = minecraft.gameRenderer.getMainCamera();
+    private static boolean displayInView(BlockPos pos, Direction facing, DisplayLayout layout) {
+        Minecraft minecraft = Minecraft.getInstance();
+        Camera camera = minecraft.gameRenderer.getMainCamera();
         if (camera == null) return true;
         //? if >=1.21.11 {
         /*net.minecraft.world.phys.Vec3 eye = camera.position();
@@ -194,17 +204,35 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
         org.joml.Vector3fc up = camera.getUpVector();
         org.joml.Vector3fc left = camera.getLeftVector();
         //?}
-        double dx = pos.getX() + 0.5 - eye.x;
-        double dy = pos.getY() + 0.5 - eye.y;
-        double dz = pos.getZ() + 0.5 - eye.z;
-        double depth = dx * forward.x() + dy * forward.y() + dz * forward.z();
-        if (depth < -CELL_RADIUS) return false;
-        double across = Math.abs(dx * left.x() + dy * left.y() + dz * left.z());
-        double upward = Math.abs(dx * up.x() + dy * up.y() + dz * up.z());
-        double aspect = Math.max(1, minecraft.getWindow().getWidth()) / (double) Math.max(1, minecraft.getWindow().getHeight());
-        double tanVertical = Math.tan(Math.toRadians(minecraft.options.fov().get()) / 2) * VIEW_MARGIN;
-        double reach = Math.max(depth, 0);
-        return upward <= reach * tanVertical + CELL_RADIUS && across <= reach * tanVertical * aspect + CELL_RADIUS;
+        Direction right = facing.getCounterClockWise();
+        double face = DEPTH_UNITS / 16.0 - 0.5;
+        double originX = pos.getX() + 0.5 + facing.getStepX() * face - right.getStepX() * (layout.startCol() + 0.5);
+        double originY = pos.getY() - layout.startRow();
+        double originZ = pos.getZ() + 0.5 + facing.getStepZ() * face - right.getStepZ() * (layout.startCol() + 0.5);
+        double aspect = Math.max(1, minecraft.getWindow().getWidth())
+                / (double) Math.max(1, minecraft.getWindow().getHeight());
+        double tanVertical = Math.tan(Math.min(Math.toRadians(minecraft.options.fov().get()) * FOV_MODIFIER_MAX / 2,
+                Math.toRadians(89)));
+        double tanHorizontal = tanVertical * aspect;
+        int outsideAll = 0b11111;
+        for (int corner = 0; corner < 4; corner++) {
+            int across = (corner & 1) * layout.widthCells();
+            int upward = (corner >> 1) * layout.heightCells();
+            double dx = originX + right.getStepX() * across - eye.x;
+            double dy = originY + upward - eye.y;
+            double dz = originZ + right.getStepZ() * across - eye.z;
+            double depth = dx * forward.x() + dy * forward.y() + dz * forward.z();
+            double sideways = dx * left.x() + dy * left.y() + dz * left.z();
+            double height = dx * up.x() + dy * up.y() + dz * up.z();
+            int outside = 0;
+            if (depth < 0) outside |= 1;
+            if (sideways > depth * tanHorizontal) outside |= 2;
+            if (-sideways > depth * tanHorizontal) outside |= 4;
+            if (height > depth * tanVertical) outside |= 8;
+            if (-height > depth * tanVertical) outside |= 16;
+            outsideAll &= outside;
+        }
+        return outsideAll == 0;
     }
 
     private void draw(ScreenBlockEntity blockEntity, PoseStack poseStack, GeometrySink sink, CaptionOut captions,
@@ -219,11 +247,11 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
         int row = layout.startRow();
 
         BlockPos receiverPos = blockEntity.getReceiverPos();
-        ClientVideoReceivers.Frame frame =
-                receiverPos == null || !inView(blockEntity.getBlockPos()) ? null : ClientVideoReceivers.present(receiverPos);
+        ClientVideoReceivers.Frame frame = receiverPos == null ? null
+                : ClientVideoReceivers.present(receiverPos, displayInView(blockEntity.getBlockPos(), facing, layout));
         boolean card = false;
         if (frame == null && receiverPos != null) {
-            frame = com.nachtraben.soundstage.client.video.NowPlayingCards.frame(receiverPos,
+            frame = NowPlayingCards.frame(receiverPos,
                     layout.widthCells(), layout.heightCells());
             card = frame != null;
         }
@@ -240,8 +268,7 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
         DisplayLayout.Rect picture = null;
         if (frame != null) {
             int videoW = frame.width();
-            int videoH = com.nachtraben.soundstage.RigStaging.fault("video-squash")
-                    ? frame.height() * 2 : frame.height();
+            int videoH = frame.height();
             picture = fitMode == ScreenBlockEntity.FitMode.FILL && !card
                     ? DisplayLayout.fill(videoW, videoH, layout.widthCells(), layout.heightCells())
                     : DisplayLayout.fit(videoW, videoH, layout.widthCells(), layout.heightCells());
@@ -307,20 +334,13 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
                 }
             }
 
-            if (!(com.nachtraben.soundstage.RigStaging.fault("video-no-back")
-                    || com.nachtraben.soundstage.RigStaging.fault("video-no-back-lit"))) {
-                casing(pose, consumer, rx, rz, fx, fz, bezelLeft, bezelRight, bezelBottom, bezelTop,
-                        bezelDepth, packedLight);
-            }
+            casing(pose, consumer, rx, rz, fx, fz, bezelLeft, bezelRight, bezelBottom, bezelTop,
+                    bezelDepth, packedLight);
         }));
 
         if (finalSlice != null) {
-            boolean bothFaces = com.nachtraben.soundstage.RigStaging.fault("video-no-back-lit");
             sink.emit(SoundstageRenderTypes.video(frame.texture()),
-                    (pose, consumer) -> {
-                        picture(pose, consumer, rx, rz, fx, fz, finalSlice, depth, false);
-                        if (bothFaces) picture(pose, consumer, rx, rz, fx, fz, finalSlice, depth, true);
-                    });
+                    (pose, consumer) -> picture(pose, consumer, rx, rz, fx, fz, finalSlice, depth, false));
             if (ScreenOverlay.active()) {
                 recordOverlay(poseStack.last(), frame.texture(), rx, rz, fx, fz, finalSlice, depth);
             }
@@ -332,13 +352,9 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
             if (caption != null && !caption.isEmpty()) {
                 DisplayLayout.Rect visible = visiblePicture(picture, layout.widthCells(), layout.heightCells());
                 DisplayLayout.Rect area = layout.captionArea(visible);
-                if (area != null && com.nachtraben.soundstage.RigStaging.fault("caption-from-picture")) {
-                    double foot = Math.max(area.y(), visible.y());
-                    area = new DisplayLayout.Rect(area.x(), foot, area.width(), area.y() + area.height() - foot);
-                }
                 if (area != null) renderCaption(poseStack, captions, facing, visible, area, col, row, depth, caption);
                 if (CAPTION_ANNOUNCED.add(receiverPos)) {
-                    org.slf4j.LoggerFactory.getLogger("Soundstage").info(area != null
+                    LoggerFactory.getLogger("Soundstage").info(area != null
                             ? "Soundstage: drawing subtitles for receiver {} on its display." :
                             "Soundstage: a subtitle is due for receiver {}, but its display has no row to draw it on.",
                             receiverPos.toShortString());
@@ -369,7 +385,7 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
         float scale = lineHeightBlocks / font.lineHeight;
         int maxWidthPx = Math.max(20, (int) (0.9 * area.width() / scale));
 
-        List<FormattedCharSequence> lines = new java.util.ArrayList<>();
+        List<FormattedCharSequence> lines = new ArrayList<>();
         for (FormattedCharSequence wrapped : font.split(
                 Component.literal(text).withStyle(style -> style.withFont(SUBTITLE_FONT_STYLE)), maxWidthPx)) {
             lines.add(FormattedCharSequence.composite(PAD, wrapped, PAD));
@@ -378,7 +394,7 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
         if (lineCount == 0) return;
 
         poseStack.pushPose();
-        float yaw = com.nachtraben.soundstage.RigStaging.fault("caption-yaw-positive") ? facing.toYRot() : -facing.toYRot();
+        float yaw = -facing.toYRot();
         poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
         float xCenter = (float) (area.x() + area.width() / 2.0 - (col + 0.5));
         float yBase = (float) (area.y() + picture.height() * CAPTION_BOTTOM_MARGIN - (row + 0.5))
@@ -388,7 +404,7 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
         poseStack.scale(scale, -scale, scale);
 
         boolean overlay = ScreenOverlay.active();
-        boolean inLevel = !ScreenOverlay.ownsCaptions() || com.nachtraben.soundstage.RigStaging.fault("caption-in-level-under-pack");
+        boolean inLevel = !ScreenOverlay.ownsCaptions();
         for (int i = 0; i < lineCount; i++) {
             FormattedCharSequence line = lines.get(lineCount - 1 - i);
             int width = font.width(line);
@@ -404,19 +420,19 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
         poseStack.popPose();
     }
 
-    private static final net.minecraft.resources.ResourceLocation SUBTITLE_FONT =
+    private static final ResourceLocation SUBTITLE_FONT =
             ResourceLocation.fromNamespaceAndPath("soundstage", "subtitle");
     //? if >=1.21.11 {
     /*private static final net.minecraft.network.chat.FontDescription SUBTITLE_FONT_STYLE =
             new net.minecraft.network.chat.FontDescription.Resource(SUBTITLE_FONT);
     *///?} else {
-    private static final net.minecraft.resources.ResourceLocation SUBTITLE_FONT_STYLE = SUBTITLE_FONT;
+    private static final ResourceLocation SUBTITLE_FONT_STYLE = SUBTITLE_FONT;
     //?}
 
-    static void captionBox(Matrix4f matrix, com.mojang.blaze3d.vertex.VertexConsumer box, int width) {
+    static void captionBox(Matrix4f matrix, VertexConsumer box, int width) {
         float x0 = -1f, x1 = width, top = CAPTION_BOX_TOP, bottom = CAPTION_BOX_BOTTOM, z = -0.01f;
         int light = RenderLight.FULL_BRIGHT;
-        int colour = captionBoxColour();
+        int colour = CAPTION_BOX;
         box.addVertex(matrix, x0, bottom, z).setColor(colour).setLight(light);
         box.addVertex(matrix, x1, bottom, z).setColor(colour).setLight(light);
         box.addVertex(matrix, x1, top, z).setColor(colour).setLight(light);
@@ -439,13 +455,10 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
 
     //? if >=26.3 {
     /*static net.minecraft.client.gui.font.TextRenderable captionBackground(Font font, int width) {
-        return font.prepareBackground(-1f, CAPTION_BOX_TOP, width, CAPTION_BOX_BOTTOM, captionBoxColour());
+        return font.prepareBackground(-1f, CAPTION_BOX_TOP, width, CAPTION_BOX_BOTTOM, CAPTION_BOX);
     }
     *///?}
 
-    private static int captionBoxColour() {
-        return com.nachtraben.soundstage.RigStaging.fault("caption-box-opaque") ? 0xFF000000 : CAPTION_BOX;
-    }
     private static final int CAPTION_BOX = 0xBF000000;
     private static final FormattedCharSequence PAD =
             Component.literal(" ").withStyle(style -> style.withFont(SUBTITLE_FONT_STYLE)).getVisualOrderText();
@@ -507,7 +520,7 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
                 CASING_RGB, 255, nx, ny, nz, light, OverlayTexture.NO_OVERLAY);
     }
 
-    private static void recordOverlay(PoseStack.Pose pose, net.minecraft.resources.ResourceLocation texture,
+    private static void recordOverlay(PoseStack.Pose pose, ResourceLocation texture,
                                       int rx, int rz, int fx, int fz, DisplayLayout.Slice slice, float depth) {
         float left = (float) slice.cellX();
         float right = left + (float) slice.cellWidth();
@@ -521,7 +534,7 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
                 corner(rx, rz, fx, fz, right, top, depth),
                 corner(rx, rz, fx, fz, left, top, depth)};
         float[] xyz = new float[12];
-        org.joml.Vector3f p = new org.joml.Vector3f();
+        Vector3f p = new Vector3f();
         for (int i = 0; i < 4; i++) {
             pose.pose().transformPosition(corners[i].x(), corners[i].y(), corners[i].z(), p);
             xyz[i * 3] = p.x();
@@ -553,19 +566,27 @@ public class ScreenBlockEntityRenderer implements BlockEntityRenderer<ScreenBloc
         Corner d = corner(rx, rz, fx, fz, left, top, depth);
 
         int nx = reverse ? -fx : fx, nz = reverse ? -fz : fz;
-        org.joml.Vector3f n = pose.transformNormal(nx, 0, nz, new org.joml.Vector3f());
+        Vector3f n = pose.transformNormal(nx, 0, nz, new Vector3f());
         int overlay = OverlayTexture.NO_OVERLAY;
         int light = RenderLight.FULL_BRIGHT;
         if (!reverse) {
-            Mesh.addTintedVertex(consumer, pose, a.x(), a.y(), a.z(), u0, v1, 0xFFFFFF, 255, n.x(), n.y(), n.z(), light, overlay);
-            Mesh.addTintedVertex(consumer, pose, b.x(), b.y(), b.z(), u1, v1, 0xFFFFFF, 255, n.x(), n.y(), n.z(), light, overlay);
-            Mesh.addTintedVertex(consumer, pose, c.x(), c.y(), c.z(), u1, v0, 0xFFFFFF, 255, n.x(), n.y(), n.z(), light, overlay);
-            Mesh.addTintedVertex(consumer, pose, d.x(), d.y(), d.z(), u0, v0, 0xFFFFFF, 255, n.x(), n.y(), n.z(), light, overlay);
+            Mesh.addTintedVertex(consumer, pose, a.x(), a.y(), a.z(), u0, v1, 0xFFFFFF, 255, n.x(), n.y(), n.z(),
+                    light, overlay);
+            Mesh.addTintedVertex(consumer, pose, b.x(), b.y(), b.z(), u1, v1, 0xFFFFFF, 255, n.x(), n.y(), n.z(),
+                    light, overlay);
+            Mesh.addTintedVertex(consumer, pose, c.x(), c.y(), c.z(), u1, v0, 0xFFFFFF, 255, n.x(), n.y(), n.z(),
+                    light, overlay);
+            Mesh.addTintedVertex(consumer, pose, d.x(), d.y(), d.z(), u0, v0, 0xFFFFFF, 255, n.x(), n.y(), n.z(),
+                    light, overlay);
         } else {
-            Mesh.addTintedVertex(consumer, pose, a.x(), a.y(), a.z(), u0, v1, 0xFFFFFF, 255, n.x(), n.y(), n.z(), light, overlay);
-            Mesh.addTintedVertex(consumer, pose, d.x(), d.y(), d.z(), u0, v0, 0xFFFFFF, 255, n.x(), n.y(), n.z(), light, overlay);
-            Mesh.addTintedVertex(consumer, pose, c.x(), c.y(), c.z(), u1, v0, 0xFFFFFF, 255, n.x(), n.y(), n.z(), light, overlay);
-            Mesh.addTintedVertex(consumer, pose, b.x(), b.y(), b.z(), u1, v1, 0xFFFFFF, 255, n.x(), n.y(), n.z(), light, overlay);
+            Mesh.addTintedVertex(consumer, pose, a.x(), a.y(), a.z(), u0, v1, 0xFFFFFF, 255, n.x(), n.y(), n.z(),
+                    light, overlay);
+            Mesh.addTintedVertex(consumer, pose, d.x(), d.y(), d.z(), u0, v0, 0xFFFFFF, 255, n.x(), n.y(), n.z(),
+                    light, overlay);
+            Mesh.addTintedVertex(consumer, pose, c.x(), c.y(), c.z(), u1, v0, 0xFFFFFF, 255, n.x(), n.y(), n.z(),
+                    light, overlay);
+            Mesh.addTintedVertex(consumer, pose, b.x(), b.y(), b.z(), u1, v1, 0xFFFFFF, 255, n.x(), n.y(), n.z(),
+                    light, overlay);
         }
     }
 }

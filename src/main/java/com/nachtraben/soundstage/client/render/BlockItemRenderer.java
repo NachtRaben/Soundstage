@@ -1,10 +1,15 @@
 package com.nachtraben.soundstage.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.nachtraben.soundstage.block.ReceiverBlockEntity;
 import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
 import com.nachtraben.soundstage.block.speaker.SpeakerFinish;
-import com.nachtraben.soundstage.registry.ModComponents;
+import com.nachtraben.soundstage.util.ItemData;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.level.block.entity.BlockEntity;
+
+import java.util.HashMap;
+import java.util.Map;
 //? if >=1.21.11 {
 /*import com.mojang.serialization.MapCodec;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -19,6 +24,7 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.EntityBlock;
 
 //? if >=1.21.11 {
@@ -27,22 +33,29 @@ import net.minecraft.world.level.block.EntityBlock;
 public final class BlockItemRenderer extends BlockEntityWithoutLevelRenderer {
 //?}
 
-    record Display(Block block, SpeakerFinish finish) {}
+    record Display(BlockState state, SpeakerFinish finish) {
+        Block block() {
+            return state.getBlock();
+        }
+    }
 
     private static final int MAX_DISPLAYS = 64;
 
-    private final java.util.Map<Display, net.minecraft.world.level.block.entity.BlockEntity> displays = new java.util.HashMap<>();
-    private final java.util.Map<Block, SpeakerFinish> defaults = new java.util.HashMap<>();
+    private final Map<Display, BlockEntity> displays = new HashMap<>();
+    private final Map<Block, SpeakerFinish> defaults = new HashMap<>();
     private final SpeakerBlockEntityRenderer<SpeakerBlockEntity> renderer = new SpeakerBlockEntityRenderer<>(null);
     private final ReceiverBlockEntityRenderer receiverRenderer = new ReceiverBlockEntityRenderer(null);
 
     //? if >=26.1 {
-    /*public record Unbaked() implements SpecialModelRenderer.Unbaked<Display> {
-        public static final MapCodec<Unbaked> CODEC = MapCodec.unit(new Unbaked());
+    /*public record Unbaked(boolean level) implements SpecialModelRenderer.Unbaked<Display> {
+        public static final MapCodec<Unbaked> CODEC =
+                com.mojang.serialization.codecs.RecordCodecBuilder.mapCodec(instance -> instance.group(
+                        com.mojang.serialization.Codec.BOOL.optionalFieldOf("level", false).forGetter(Unbaked::level))
+                        .apply(instance, Unbaked::new));
 
         @Override
         public SpecialModelRenderer<Display> bake(SpecialModelRenderer.BakingContext context) {
-            return new BlockItemRenderer();
+            return new BlockItemRenderer(level);
         }
 
         @Override
@@ -51,12 +64,15 @@ public final class BlockItemRenderer extends BlockEntityWithoutLevelRenderer {
         }
     }
     *///?} else if >=1.21.11 {
-    /*public record Unbaked() implements SpecialModelRenderer.Unbaked {
-        public static final MapCodec<Unbaked> CODEC = MapCodec.unit(new Unbaked());
+    /*public record Unbaked(boolean level) implements SpecialModelRenderer.Unbaked {
+        public static final MapCodec<Unbaked> CODEC =
+                com.mojang.serialization.codecs.RecordCodecBuilder.mapCodec(instance -> instance.group(
+                        com.mojang.serialization.Codec.BOOL.optionalFieldOf("level", false).forGetter(Unbaked::level))
+                        .apply(instance, Unbaked::new));
 
         @Override
         public SpecialModelRenderer<?> bake(SpecialModelRenderer.BakingContext context) {
-            return new BlockItemRenderer();
+            return new BlockItemRenderer(level);
         }
 
         @Override
@@ -66,7 +82,18 @@ public final class BlockItemRenderer extends BlockEntityWithoutLevelRenderer {
     }
     *///?}
     //? if >=1.21.11 {
-    /*public BlockItemRenderer() {
+    /*private final boolean level;
+
+    public BlockItemRenderer(boolean level) {
+        this.level = level;
+    }
+
+    private boolean queuedWithTheLevel() {
+        //? if >=26.2 {
+        /^return level;
+        ^///?} else {
+        return false;
+        //?}
     }
 
     @Override
@@ -75,8 +102,9 @@ public final class BlockItemRenderer extends BlockEntityWithoutLevelRenderer {
             return null;
         }
         Block block = item.getBlock();
-        SpeakerFinish stored = storedFinish(stack);
-        return new Display(block, stored != null ? stored : defaultFinish(block, entityBlock));
+        SpeakerFinish stored = ItemData.finish(stack);
+        return new Display(ItemData.blockState(stack, block.defaultBlockState()),
+                stored != null ? stored : defaultFinish(block, entityBlock));
     }
 
     @Override
@@ -87,7 +115,6 @@ public final class BlockItemRenderer extends BlockEntityWithoutLevelRenderer {
     public void submit(Display key, ItemDisplayContext context, PoseStack poseStack, SubmitNodeCollector collector,
                        int light, int overlay, boolean foil, int outline) {
     //?}
-        DRAWN.incrementAndGet();
         if (key == null || !(key.block() instanceof EntityBlock entityBlock)) return;
         draw(key, entityBlock, poseStack, GeometrySinks.submit(poseStack, collector), light, overlay);
     }
@@ -99,13 +126,14 @@ public final class BlockItemRenderer extends BlockEntityWithoutLevelRenderer {
         }
     }
 
-    private void draw(Display key, EntityBlock entityBlock, PoseStack poseStack, GeometrySink sink, int light, int overlay) {
+    private void draw(Display key, EntityBlock entityBlock, PoseStack poseStack, GeometrySink sink, int light,
+                      int overlay) {
         if (displays.size() >= MAX_DISPLAYS) {
             displays.values().forEach(BlockItemRenderer::release);
             displays.clear();
         }
         var display = displays.computeIfAbsent(key, k -> {
-            var created = entityBlock.newBlockEntity(BlockPos.ZERO, k.block().defaultBlockState());
+            var created = entityBlock.newBlockEntity(BlockPos.ZERO, k.state());
             if (created instanceof SpeakerBlockEntity speaker && k.finish() != null) {
                 speaker.setFinish(k.finish());
             } else if (created instanceof com.nachtraben.soundstage.block.ReceiverBlockEntity receiver
@@ -114,7 +142,7 @@ public final class BlockItemRenderer extends BlockEntityWithoutLevelRenderer {
             }
             return created;
         });
-        StaticMesh.setDeferralAvailable(false);
+        StaticMesh.setDeferralAvailable(queuedWithTheLevel());
         try {
             if (display instanceof SpeakerBlockEntity speaker) {
                 renderer.drawItem(speaker, poseStack, sink, light, overlay);
@@ -131,34 +159,27 @@ public final class BlockItemRenderer extends BlockEntityWithoutLevelRenderer {
     }
     //?}
 
-    private static SpeakerFinish storedFinish(ItemStack stack) {
-        if (com.nachtraben.soundstage.RigStaging.fault("item-finish-unread")) return null;
-        return com.nachtraben.soundstage.util.ItemData.finish(stack);
-    }
-
-    public static final java.util.concurrent.atomic.AtomicLong DRAWN = new java.util.concurrent.atomic.AtomicLong();
-
     //? if <1.21.11 {
     @Override
     public void renderByItem(ItemStack stack, ItemDisplayContext context, PoseStack poseStack,
                              MultiBufferSource buffers, int light, int overlay) {
-        DRAWN.incrementAndGet();
         if (!(stack.getItem() instanceof BlockItem item) || !(item.getBlock() instanceof EntityBlock entityBlock)) {
             return;
         }
         Block block = item.getBlock();
-        SpeakerFinish stored = storedFinish(stack);
+        SpeakerFinish stored = ItemData.finish(stack);
         SpeakerFinish finish = stored != null ? stored : defaultFinish(block, entityBlock);
 
         if (displays.size() >= MAX_DISPLAYS) {
             displays.values().forEach(BlockItemRenderer::release);
             displays.clear();
         }
-        var display = displays.computeIfAbsent(new Display(block, finish), key -> {
-            var created = entityBlock.newBlockEntity(BlockPos.ZERO, block.defaultBlockState());
+        var display = displays.computeIfAbsent(
+                new Display(ItemData.blockState(stack, block.defaultBlockState()), finish), key -> {
+            var created = entityBlock.newBlockEntity(BlockPos.ZERO, key.state());
             if (created instanceof SpeakerBlockEntity speaker && key.finish() != null) {
                 speaker.setFinish(key.finish());
-            } else if (created instanceof com.nachtraben.soundstage.block.ReceiverBlockEntity receiver
+            } else if (created instanceof ReceiverBlockEntity receiver
                     && key.finish() != null) {
                 receiver.setFinish(key.finish());
             }
@@ -168,7 +189,7 @@ public final class BlockItemRenderer extends BlockEntityWithoutLevelRenderer {
         try {
             if (display instanceof SpeakerBlockEntity speaker) {
                 renderer.render(speaker, 0f, poseStack, buffers, light, overlay);
-            } else if (display instanceof com.nachtraben.soundstage.block.ReceiverBlockEntity receiver) {
+            } else if (display instanceof ReceiverBlockEntity receiver) {
                 receiverRenderer.render(receiver, 0f, poseStack, buffers, light, overlay);
             }
         } finally {
@@ -184,14 +205,14 @@ public final class BlockItemRenderer extends BlockEntityWithoutLevelRenderer {
         SpeakerFinish found = null;
         if (probe instanceof SpeakerBlockEntity speaker) {
             found = speaker.getFinish();
-        } else if (probe instanceof com.nachtraben.soundstage.block.ReceiverBlockEntity receiver) {
+        } else if (probe instanceof ReceiverBlockEntity receiver) {
             found = receiver.getFinish();
         }
         if (found != null) defaults.put(block, found);
         return found;
     }
 
-    private static void release(net.minecraft.world.level.block.entity.BlockEntity display) {
+    private static void release(BlockEntity display) {
         if (display instanceof SpeakerBlockEntity speaker) {
             speaker.renderCache.close();
         }

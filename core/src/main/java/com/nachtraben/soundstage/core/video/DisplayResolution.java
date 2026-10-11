@@ -2,9 +2,9 @@ package com.nachtraben.soundstage.core.video;
 
 public final class DisplayResolution {
 
-    public static final int LINES_PER_BLOCK = 120;
+    public static final int LINES_PER_BLOCK = 240;
 
-    public static final int MIN_LINES = 240;
+    public static final int MIN_LINES = 480;
 
     public static final int UNKNOWN = -1;
 

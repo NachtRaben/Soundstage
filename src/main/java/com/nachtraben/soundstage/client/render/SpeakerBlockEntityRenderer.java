@@ -9,17 +9,27 @@ import com.nachtraben.soundstage.block.speaker.CenterSpeakerBlock;
 import com.nachtraben.soundstage.block.speaker.SatelliteSpeakerBlock;
 import com.nachtraben.soundstage.block.speaker.SpeakerBlock;
 import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
+import com.nachtraben.soundstage.block.speaker.SpeakerFinish;
 import com.nachtraben.soundstage.block.speaker.SubwooferBlock;
+import com.nachtraben.soundstage.client.audio.AudioDecoder;
+import com.nachtraben.soundstage.client.audio.ClientAudioReceiver;
+import com.nachtraben.soundstage.client.audio.StreamingSoundInstance;
+import com.nachtraben.soundstage.config.SoundstageAppearance;
 import com.nachtraben.soundstage.core.SpeakerGeometry;
 import com.nachtraben.soundstage.registry.ModBlocks;
+import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Arrays;
+
 //? if >=1.21.11 {
-/*public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements BlockEntityRenderer<T, BlockEntityState<T>> {
+/*public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity>
+        implements BlockEntityRenderer<T, BlockEntityState<T>> {
 *///?} else {
 public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements BlockEntityRenderer<T> {
 //?}
@@ -28,7 +38,7 @@ public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements
 
     private record CabinetDesign(CabinetRenderer.Layout layout, DriverRenderer.Driver[] drivers) {
         CabinetRenderer.Hole[] holes() {
-            return java.util.Arrays.stream(drivers).map(DriverRenderer.Driver::hole)
+            return Arrays.stream(drivers).map(DriverRenderer.Driver::hole)
                     .toArray(CabinetRenderer.Hole[]::new);
         }
     }
@@ -100,15 +110,18 @@ public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements
     }
 
     @Override
-    public void extractRenderState(T blockEntity, BlockEntityState<T> state, float partialTick, net.minecraft.world.phys.Vec3 camera,
-                                   net.minecraft.client.renderer.feature.ModelFeatureRenderer.@org.jetbrains.annotations.Nullable CrumblingOverlay breaking) {
+    public void extractRenderState(T blockEntity, BlockEntityState<T> state, float partialTick,
+            net.minecraft.world.phys.Vec3 camera,
+            net.minecraft.client.renderer.feature.ModelFeatureRenderer.@org.jetbrains.annotations.Nullable
+                    CrumblingOverlay breaking) {
         BlockEntityRenderer.super.extractRenderState(blockEntity, state, partialTick, camera, breaking);
         state.blockEntity = blockEntity;
         state.partialTick = partialTick;
     }
 
     @Override
-    public void submit(BlockEntityState<T> state, PoseStack poseStack, net.minecraft.client.renderer.SubmitNodeCollector collector,
+    public void submit(BlockEntityState<T> state, PoseStack poseStack,
+                       net.minecraft.client.renderer.SubmitNodeCollector collector,
                        net.minecraft.client.renderer.state.CameraRenderState camera) {
         if (state.blockEntity == null) return;
         draw(state.blockEntity, poseStack, GeometrySinks.submit(poseStack, collector), state.lightCoords,
@@ -116,7 +129,9 @@ public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements
     }
     *///?} else {
     @Override
-    public void render(T blockEntity, float partialTick, @NotNull PoseStack poseStack, net.minecraft.client.renderer.MultiBufferSource bufferSource, int packedLight, int packedOverlay) {
+    public void render(T blockEntity, float partialTick, @NotNull PoseStack poseStack,
+                       net.minecraft.client.renderer.MultiBufferSource bufferSource, int packedLight,
+                       int packedOverlay) {
         draw(blockEntity, poseStack, GeometrySinks.immediate(poseStack, bufferSource), packedLight, packedOverlay);
     }
     //?}
@@ -128,10 +143,6 @@ public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements
     private void draw(T blockEntity, PoseStack poseStack, GeometrySink sink, int packedLight, int packedOverlay) {
         BlockState state = blockEntity.getBlockState();
         if (!(state.getBlock() instanceof AbstractSpeakerBlock)) return;
-        if (RenderPreview.wooferFullBright) {
-            packedLight = RenderLight.FULL_BRIGHT;
-        }
-
         poseStack.pushPose();
         poseStack.translate(0.5D, 0.5D, 0.5D);
         int rotation = state.getValue(AbstractSpeakerBlock.ROTATION);
@@ -143,8 +154,8 @@ public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements
         boolean grille = state.getValue(AbstractSpeakerBlock.GRILLE);
 
         if (blockEntity instanceof PartyBoxBlockEntity box && state.getBlock() instanceof PartyBoxBlock) {
-            float level = previewLevel(playback.level());
-            float peak = previewLevel(playback.peak());
+            float level = playback.level();
+            float peak = playback.peak();
             PartyBoxRenderer.render(box, grille, playback.excursion(), level, peak,
                     poseStack, sink, packedLight, packedOverlay);
         } else {
@@ -158,10 +169,10 @@ public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements
         poseStack.popPose();
     }
 
-    private record CabinetStaticKey(CabinetDesign design, com.nachtraben.soundstage.block.speaker.SpeakerFinish finish,
+    private record CabinetStaticKey(CabinetDesign design, SpeakerFinish finish,
                                     boolean grille, int light, int overlay) {}
 
-    private record CabinetIdleKey(CabinetDesign design, com.nachtraben.soundstage.block.speaker.SpeakerFinish finish,
+    private record CabinetIdleKey(CabinetDesign design, SpeakerFinish finish,
                                   boolean grille, int light, int overlay) {}
 
     private static void renderCabinet(CabinetDesign design, SpeakerBlockEntity speaker, boolean grille,
@@ -181,7 +192,8 @@ public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements
                     });
         } else {
             speaker.renderCache.render(new CabinetStaticKey(design, finish, grille, light, overlay), poseStack, sink,
-                    (scratch, staticSink) -> renderCabinetStatic(design, finish, grille, scratch, staticSink, light, overlay));
+                    (scratch, staticSink) ->
+                            renderCabinetStatic(design, finish, grille, scratch, staticSink, light, overlay));
             renderCabinetDrivers(design, excursion, clear, poseStack, sink, light, overlay);
         }
 
@@ -201,7 +213,7 @@ public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements
         }
     }
 
-    private static void renderCabinetStatic(CabinetDesign design, com.nachtraben.soundstage.block.speaker.SpeakerFinish finish,
+    private static void renderCabinetStatic(CabinetDesign design, SpeakerFinish finish,
                                             boolean grille, PoseStack poseStack, GeometrySink sink,
                                             int light, int overlay) {
         CabinetRenderer.render(design.layout(), finish, grille, design.holes(), poseStack, sink, light, overlay);
@@ -230,7 +242,7 @@ public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements
                                                Playback playback) {
         if (playback.excursion() == 0.0f) return playback;
         boolean subwoofer = state.is(ModBlocks.SUBWOOFER_BLOCK.get());
-        net.minecraft.client.Camera camera = net.minecraft.client.Minecraft.getInstance()
+        Camera camera = Minecraft.getInstance()
                 .gameRenderer.getMainCamera();
         if (camera == null) return playback;
         double range = subwoofer ? SUB_ANIMATION_RANGE_SQR : ANIMATION_RANGE_SQR;
@@ -245,39 +257,27 @@ public class SpeakerBlockEntityRenderer<T extends SpeakerBlockEntity> implements
         return new Playback(0.0f, playback.level(), playback.peak());
     }
 
-    private static float previewLevel(float measured) {
-        Float preview = RenderPreview.partyLevel;
-        return preview == null ? measured : Mth.clamp(preview, 0f, 1f);
-    }
-
     private record Playback(float excursion, float level, float peak) {
         static final Playback SILENT = new Playback(0.0f, 0.0f, 0.0f);
     }
 
     private Playback playbackFor(T blockEntity) {
-        if (RenderPreview.wooferPinnedAtRest) return Playback.SILENT;
-        Float forced = RenderPreview.speakerExcursion;
-        if (forced != null) {
-            float excursion = Mth.clamp(forced, -1.0f, 1.0f);
-            float level = Math.abs(excursion);
-            return new Playback(excursion, level, level);
-        }
         if (blockEntity.getReceiverPos() == null) {
             return Playback.SILENT;
         }
-        com.nachtraben.soundstage.client.audio.ClientAudioReceiver receiver =
-                com.nachtraben.soundstage.client.audio.AudioDecoder.getReceiver(blockEntity.getReceiverPos());
+        ClientAudioReceiver receiver =
+                AudioDecoder.getReceiver(blockEntity.getReceiverPos());
         if (receiver == null) {
             return Playback.SILENT;
         }
-        com.nachtraben.soundstage.client.audio.StreamingSoundInstance stream =
+        StreamingSoundInstance stream =
                 receiver.streams.get(blockEntity.getBlockPos());
         if (stream == null) {
             return Playback.SILENT;
         }
 
         double audible = receiver.audibleSequenceThisFrame();
-        float gain = com.nachtraben.soundstage.config.SoundstageAppearance.driverExcursionGain();
+        float gain = SoundstageAppearance.driverExcursionGain();
         return new Playback(
                 Mth.clamp(stream.sampleExcursion(audible) * gain, -1.0f, 1.0f),
                 Mth.clamp(stream.sampleLevel(audible), 0.0f, 1.0f),

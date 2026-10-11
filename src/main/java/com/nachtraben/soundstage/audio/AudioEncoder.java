@@ -1,16 +1,32 @@
 package com.nachtraben.soundstage.audio;
 
+import com.nachtraben.soundstage.audio.video.VideoCapableTrack;
+import com.nachtraben.soundstage.block.IAudioReceiver;
+import com.nachtraben.soundstage.config.SoundstageConfig;
+import com.nachtraben.soundstage.core.LoudnessLeveller;
 import com.nachtraben.soundstage.core.OpusCodec;
+import com.nachtraben.soundstage.core.SpeakerAcoustics;
+import com.nachtraben.soundstage.core.StreamSyncState;
+import com.nachtraben.soundstage.core.VolumeBoost;
+import com.nachtraben.soundstage.core.video.SurroundBuffer;
+import com.nachtraben.soundstage.core.video.SurroundFrame;
 import com.nachtraben.soundstage.network.AudioPacket;
 import com.nachtraben.soundstage.network.NetworkHandler;
+import com.nachtraben.soundstage.util.ServerPause;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
+import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrame;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.LoggerFactory;
 
-import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
-import java.nio.ShortBuffer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.LockSupport;
 
 public class AudioEncoder {
     public static final int SAMPLE_RATE = OpusCodec.SAMPLE_RATE;
@@ -19,36 +35,36 @@ public class AudioEncoder {
     public static final int MAX_PACKET_SIZE = OpusCodec.MAX_PACKET_SIZE;
 
     private static final long PREFILL_NANOS =
-            com.nachtraben.soundstage.core.StreamSyncState.PREROLL_FRAMES * 20_000_000L;
+            StreamSyncState.PREROLL_FRAMES * 20_000_000L;
 
     private final OpusCodec.Encoder encoder = OpusCodec.available() ? new OpusCodec.Encoder() : null;
-    private static final java.util.concurrent.atomic.AtomicBoolean UNAVAILABLE_REPORTED =
-            new java.util.concurrent.atomic.AtomicBoolean();
+    private static final AtomicBoolean UNAVAILABLE_REPORTED =
+            new AtomicBoolean();
     private volatile boolean isRunning = false;
     private Thread encoderThread = null;
     private long sequence = 0;
     private long sendFailures = 0;
 
-    private com.nachtraben.soundstage.core.video.SurroundBuffer surround;
-    private final com.nachtraben.soundstage.core.VolumeBoost.Limiter limiter =
-            new com.nachtraben.soundstage.core.VolumeBoost.Limiter();
-    private com.nachtraben.soundstage.core.LoudnessLeveller leveller;
-    private final com.nachtraben.soundstage.core.video.SurroundFrame surroundFrame =
-            new com.nachtraben.soundstage.core.video.SurroundFrame();
+    private SurroundBuffer surround;
+    private final VolumeBoost.Limiter limiter =
+            new VolumeBoost.Limiter();
+    private LoudnessLeveller leveller;
+    private final SurroundFrame surroundFrame =
+            new SurroundFrame();
     private OpusCodec.Encoder frontEncoder;
     private OpusCodec.Encoder centreEncoder;
     private OpusCodec.Encoder surroundEncoder;
 
-    public void setSurround(com.nachtraben.soundstage.core.video.SurroundBuffer surround) {
+    public void setSurround(SurroundBuffer surround) {
         this.surround = surround;
     }
 
     public void startEncodingLoop(AudioPlayer player, ServerLevel level, BlockPos pos,
-                                   java.util.List<BlockPos> targets,
-                                   @org.jetbrains.annotations.Nullable com.nachtraben.soundstage.block.IAudioReceiver receiver) {
+                                   List<BlockPos> targets,
+                                   @Nullable IAudioReceiver receiver) {
         if (encoder == null) {
             if (UNAVAILABLE_REPORTED.compareAndSet(false, true)) {
-                org.slf4j.LoggerFactory.getLogger("Soundstage").error(
+                LoggerFactory.getLogger("Soundstage").error(
                         "Soundstage cannot encode audio on this server: the Opus native library did not load "
                                 + "for this platform, so receivers will play nothing.", OpusCodec.unavailableCause());
             }
@@ -62,27 +78,24 @@ public class AudioEncoder {
             while (isRunning) {
                 try {
                     applyServerPauseState(player, level, pos);
-                    retakeForSurround(player, level, pos);
+                    retake(player, level, pos);
+                    advanceStill(player, level, pos);
                     if (player.isPaused()) {
                         long sleepNanos = 20_000_000L;
-                        java.util.concurrent.locks.LockSupport.parkNanos(sleepNanos);
+                        LockSupport.parkNanos(sleepNanos);
                         nextFrameNanos = System.nanoTime() - PREFILL_NANOS;
                         continue;
                     }
-                    AudioFrame frame = player.provide(20, java.util.concurrent.TimeUnit.MILLISECONDS);
+                    AudioFrame frame = player.provide(20, TimeUnit.MILLISECONDS);
                     if (frame != null) {
-                        if (com.nachtraben.soundstage.RigStaging.fault("encoder-waits-for-server")) {
-                            level.getServer().executeBlocking(() -> { });
-                        }
                         byte[] pcm = frame.getData();
                         int volume = receiver != null ? receiver.getVolume()
-                                : com.nachtraben.soundstage.block.IAudioReceiver.DEFAULT_VOLUME;
+                                : IAudioReceiver.DEFAULT_VOLUME;
                         boolean surroundRead = readSurround(frame);
                         if (surroundRead) surroundFrame.applyVolume(volume);
                         double[] gains = gains(pcm, surroundRead, volume,
-                                receiver != null && receiver.isLevelling()
-                                        && !com.nachtraben.soundstage.RigStaging.fault("levelling-ignored"));
-                        if (gains != null) com.nachtraben.soundstage.core.VolumeBoost.apply(pcm, gains);
+                                receiver != null && receiver.isLevelling());
+                        if (gains != null) VolumeBoost.apply(pcm, gains);
                         byte[] opusBytes = encoder.encode(pcm);
                         AudioPacket.SurroundBlock surroundBlock = surroundRead ? surroundBlock(gains) : null;
                         if (opusBytes != null) {
@@ -92,41 +105,43 @@ public class AudioEncoder {
                             lastSentNanos = sentNanos;
                             try {
                                 if (targets != null) {
-                                    java.util.List<com.nachtraben.soundstage.core.SpeakerAcoustics> acoustics =
-                                            new java.util.ArrayList<>(targets.size());
-                                    java.util.List<Integer> volumes =
-                                            new java.util.ArrayList<>(targets.size());
+                                    List<SpeakerAcoustics> acoustics =
+                                            new ArrayList<>(targets.size());
+                                    List<Integer> volumes =
+                                            new ArrayList<>(targets.size());
                                     for (BlockPos t : targets) {
-                                        acoustics.add(com.nachtraben.soundstage.audio.SpeakerAudience.acousticsFor(level, t));
-                                        volumes.add(com.nachtraben.soundstage.audio.SpeakerAudience.volumeFor(level, t));
+                                        acoustics.add(SpeakerAudience.acousticsFor(level, t));
+                                        volumes.add(SpeakerAudience.volumeFor(level, t));
                                     }
                                     NetworkHandler.sendToTracking(level, pos, targets,
                                             new AudioPacket(pos, targets, acoustics, volumes,
                                                     sequence, opusBytes, resumed, frame.getTimecode(), surroundBlock));
                                 } else {
-                                    NetworkHandler.sendToTracking(level, pos, null, new AudioPacket(pos, null, null, null, sequence, opusBytes, resumed, frame.getTimecode(), surroundBlock));
+                                    NetworkHandler.sendToTracking(level, pos, null, new AudioPacket(pos, null, null,
+                                            null, sequence, opusBytes, resumed, frame.getTimecode(), surroundBlock));
                                 }
                             } catch (Exception ex) {
                                 if (sendFailures++ == 0) {
-                                    org.slf4j.LoggerFactory.getLogger("Soundstage").error(
-                                            "Audio delivery for receiver {} failed; later failures are counted, not logged",
+                                    LoggerFactory.getLogger("Soundstage").error(
+                                            "Audio delivery for receiver {} failed; later failures are counted, "
+                                                    + "not logged",
                                             pos, ex);
                                 }
                             }
 
                             sequence++;
                         }
-                        
+
                         nextFrameNanos += 20_000_000L;
                         long sleepNanos = nextFrameNanos - System.nanoTime();
                         if (sleepNanos > 0) {
-                            java.util.concurrent.locks.LockSupport.parkNanos(sleepNanos);
+                            LockSupport.parkNanos(sleepNanos);
                         }
                     } else {
                         nextFrameNanos += 20_000_000L;
                         long sleepNanos = nextFrameNanos - System.nanoTime();
                         if (sleepNanos > 0) {
-                            java.util.concurrent.locks.LockSupport.parkNanos(sleepNanos);
+                            LockSupport.parkNanos(sleepNanos);
                         } else {
                             nextFrameNanos = System.nanoTime();
                         }
@@ -135,7 +150,7 @@ public class AudioEncoder {
                 } catch (InterruptedException e) {
                     break;
                 } catch (Exception e) {
-                    org.slf4j.LoggerFactory.getLogger("Soundstage").error(
+                    LoggerFactory.getLogger("Soundstage").error(
                             "Encoder loop for receiver {} died; audio stops until the next interaction", pos, e);
                     break;
                 }
@@ -154,29 +169,49 @@ public class AudioEncoder {
 
     private boolean autoPausedForServer = false;
 
-    private long nextSurroundLookNanos;
+    private long nextRetakeLookNanos;
 
-    private void retakeForSurround(AudioPlayer player, ServerLevel level, BlockPos pos) {
+    private void retake(AudioPlayer player, ServerLevel level, BlockPos pos) {
         long now = System.nanoTime();
-        if (now < nextSurroundLookNanos) return;
-        nextSurroundLookNanos = now + 1_000_000_000L;
-        com.sedmelluq.discord.lavaplayer.track.AudioTrack track = player.getPlayingTrack();
-        if (!(track instanceof com.nachtraben.soundstage.audio.video.VideoCapableTrack video) || !video.surroundPending()) return;
-        if (com.nachtraben.soundstage.RigStaging.fault("surround-not-retaken")) return;
-        nextSurroundLookNanos = now + 5_000_000_000L;
-        net.minecraft.server.MinecraftServer server = level.getServer();
+        if (now < nextRetakeLookNanos) return;
+        nextRetakeLookNanos = now + 1_000_000_000L;
+        AudioTrack track = player.getPlayingTrack();
+        if (!(track instanceof VideoCapableTrack video)) return;
+        boolean surround = video.surroundPending();
+        VideoCapableTrack.PictureRetake picture = video.pictureRetake();
+        if (!surround && picture == VideoCapableTrack.PictureRetake.NONE) return;
+        nextRetakeLookNanos = now + 5_000_000_000L;
+        MinecraftServer server = level.getServer();
+        if (server == null) return;
+        VideoCapableTrack.PictureRetake pictureRetake = picture;
+        server.execute(() -> {
+            TrackScheduler scheduler = AudioManagerState.scheduler(pos, level);
+            if (scheduler != null && player.getPlayingTrack() == track) scheduler.retake(surround, pictureRetake);
+        });
+    }
+
+    private long nextStillLookNanos;
+
+    private void advanceStill(AudioPlayer player, ServerLevel level, BlockPos pos) {
+        AudioTrack track = player.getPlayingTrack();
+        if (!(track instanceof VideoCapableTrack video) || !video.isStill() || player.isPaused()) return;
+        if (track.getPosition() < SoundstageConfig.imageDisplaySeconds() * 1000L) return;
+        long now = System.nanoTime();
+        if (now < nextStillLookNanos) return;
+        nextStillLookNanos = now + 250_000_000L;
+        MinecraftServer server = level.getServer();
         if (server == null) return;
         server.execute(() -> {
             TrackScheduler scheduler = AudioManagerState.scheduler(pos, level);
-            if (scheduler != null && player.getPlayingTrack() == track) scheduler.retakeForSurround();
+            if (scheduler != null) scheduler.advanceStill(track);
         });
     }
 
     private void applyServerPauseState(AudioPlayer player, ServerLevel level, BlockPos pos) {
-        net.minecraft.server.MinecraftServer server = level.getServer();
+        MinecraftServer server = level.getServer();
         if (server == null) return;
 
-        boolean serverPaused = com.nachtraben.soundstage.util.ServerPause.isPaused(server);
+        boolean serverPaused = ServerPause.isPaused(server);
 
         if (serverPaused && !autoPausedForServer) {
             if (!player.isPaused()) {
@@ -190,7 +225,7 @@ public class AudioEncoder {
     }
 
     private double[] gains(byte[] pcm, boolean surroundRead, int volume, boolean levelling) {
-        double boost = com.nachtraben.soundstage.core.VolumeBoost.extraGainFor(volume);
+        double boost = VolumeBoost.extraGainFor(volume);
         if (!levelling) leveller = null;
         if (!levelling && boost <= 1.0) {
             limiter.reset();
@@ -198,27 +233,16 @@ public class AudioEncoder {
         }
         double[] levels = null;
         if (levelling) {
-            if (leveller == null) leveller = new com.nachtraben.soundstage.core.LoudnessLeveller();
-            levels = leveller.gains(pcm, com.nachtraben.soundstage.core.VolumeBoost.lavaPlayerGain(volume));
+            if (leveller == null) leveller = new LoudnessLeveller();
+            levels = leveller.gains(pcm, VolumeBoost.lavaPlayerGain(volume));
         }
         return limiter.gains(pcm, surroundRead ? surroundFrame.samples() : null, boost, levels);
     }
 
-    private boolean readSurround(com.sedmelluq.discord.lavaplayer.track.playback.AudioFrame frame) {
+    private boolean readSurround(AudioFrame frame) {
         if (surround == null || !surround.wanted()) return false;
-        if (!surround.read(frame.getTimecode() * (OpusCodec.SAMPLE_RATE / 1000),
-                com.nachtraben.soundstage.core.video.SurroundFrame.SAMPLES, surroundFrame.samples())) {
-            return false;
-        }
-        if (com.nachtraben.soundstage.RigStaging.fault("surround-swap")) {
-            short[] six = surroundFrame.samples();
-            for (int i = 0; i < six.length; i += 6) {
-                short centre = six[i + 2];
-                six[i + 2] = six[i + 4];
-                six[i + 4] = centre;
-            }
-        }
-        return true;
+        return surround.read(frame.getTimecode() * (OpusCodec.SAMPLE_RATE / 1000), SurroundFrame.SAMPLES,
+                surroundFrame.samples());
     }
 
     private AudioPacket.SurroundBlock surroundBlock(double[] gains) {
@@ -231,7 +255,8 @@ public class AudioEncoder {
         byte[] front = frontEncoder.encode(surroundFrame.front());
         byte[] centre = centreEncoder.encode(surroundFrame.centreAndLfe());
         byte[] rear = surroundEncoder.encode(surroundFrame.surround());
-        return front == null || centre == null || rear == null ? null : new AudioPacket.SurroundBlock(front, centre, rear);
+        return front == null || centre == null || rear == null ? null
+                : new AudioPacket.SurroundBlock(front, centre, rear);
     }
 
     public void stop() {

@@ -9,7 +9,8 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 public class LiveInputStateS2CPacket implements CustomPacketPayload {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "live_input_state_s2c");
+    public static final ResourceLocation ID =
+            ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "live_input_state_s2c");
     public static final Type<LiveInputStateS2CPacket> TYPE = new Type<>(ID);
     public static final StreamCodec<FriendlyByteBuf, LiveInputStateS2CPacket> STREAM_CODEC = StreamCodec.ofMember(
             LiveInputStateS2CPacket::write, LiveInputStateS2CPacket::new);

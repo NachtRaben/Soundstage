@@ -9,7 +9,8 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 public class ScreenFitModeC2SPacket implements CustomPacketPayload {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "screen_fit_mode_c2s");
+    public static final ResourceLocation ID =
+            ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "screen_fit_mode_c2s");
     public static final Type<ScreenFitModeC2SPacket> TYPE = new Type<>(ID);
     public static final StreamCodec<FriendlyByteBuf, ScreenFitModeC2SPacket> STREAM_CODEC = StreamCodec.ofMember(
             ScreenFitModeC2SPacket::write, ScreenFitModeC2SPacket::new

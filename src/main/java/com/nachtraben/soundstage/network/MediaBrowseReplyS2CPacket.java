@@ -1,6 +1,7 @@
 package com.nachtraben.soundstage.network;
 
 import com.nachtraben.soundstage.SoundstageInit;
+import com.nachtraben.soundstage.core.video.MediaNames;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -12,7 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MediaBrowseReplyS2CPacket implements CustomPacketPayload {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "media_browse_reply_s2c");
+    public static final ResourceLocation ID =
+            ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "media_browse_reply_s2c");
     public static final Type<MediaBrowseReplyS2CPacket> TYPE = new Type<>(ID);
     public static final StreamCodec<FriendlyByteBuf, MediaBrowseReplyS2CPacket> STREAM_CODEC = StreamCodec.ofMember(
             MediaBrowseReplyS2CPacket::write, MediaBrowseReplyS2CPacket::new
@@ -33,7 +35,7 @@ public class MediaBrowseReplyS2CPacket implements CustomPacketPayload {
         int size = buf.readVarInt();
         List<String> read = new ArrayList<>(size);
         for (int i = 0; i < size; i++) {
-            read.add(buf.readUtf(com.nachtraben.soundstage.core.video.MediaNames.MAX_LENGTH));
+            read.add(buf.readUtf(MediaNames.MAX_LENGTH));
         }
         this.names = read;
         this.truncated = buf.readBoolean();
@@ -43,7 +45,7 @@ public class MediaBrowseReplyS2CPacket implements CustomPacketPayload {
         buf.writeBlockPos(pos);
         buf.writeVarInt(names.size());
         for (String name : names) {
-            buf.writeUtf(name, com.nachtraben.soundstage.core.video.MediaNames.MAX_LENGTH);
+            buf.writeUtf(name, MediaNames.MAX_LENGTH);
         }
         buf.writeBoolean(truncated);
     }

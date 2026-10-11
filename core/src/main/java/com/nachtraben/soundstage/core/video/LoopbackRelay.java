@@ -1,5 +1,8 @@
 package com.nachtraben.soundstage.core.video;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
@@ -22,7 +25,7 @@ import java.util.regex.Pattern;
 
 public final class LoopbackRelay implements Closeable {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     public static final Set<Integer> RESERVED_PORTS = Set.of(25565, 25575, 25600, 25610);
 
@@ -170,7 +173,8 @@ public final class LoopbackRelay implements Closeable {
         try {
             body = upstream.open(from);
         } catch (IOException e) {
-            LOGGER.debug("Soundstage: the web relay for {} could not fetch from byte {}: {}", name, from, e.getMessage());
+            LOGGER.debug("Soundstage: the web relay for {} could not fetch from byte {}: {}", name, from,
+                    e.getMessage());
             respond(out, 502, "Bad Gateway", null);
             return;
         }
@@ -200,7 +204,8 @@ public final class LoopbackRelay implements Closeable {
             if (request.ranged() && body.ranged() || from > 0) {
                 status = 206;
                 reason = "Partial Content";
-                String end = send >= 0 ? String.valueOf(start + send - 1) : (total >= 0 ? String.valueOf(total - 1) : "");
+                String end = send >= 0 ? String.valueOf(start + send - 1)
+                        : (total >= 0 ? String.valueOf(total - 1) : "");
                 headers.append("Content-Range: bytes ").append(start).append('-').append(end).append('/')
                         .append(total >= 0 ? String.valueOf(total) : "*").append("\r\n");
             } else {

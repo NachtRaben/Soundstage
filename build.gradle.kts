@@ -1,5 +1,14 @@
+import dev.armadeus.armalib.gradle.Loader
 import dev.armadeus.armalib.gradle.jarcheck.ReleaseJarInspector
 import dev.armadeus.armalib.gradle.jarcheck.ReleaseJarRules
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import net.fabricmc.loom.api.LoomGradleExtensionAPI
+import net.neoforged.moddevgradle.dsl.ModDevExtension
+import org.gradle.api.logging.Logging
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+
+import java.net.URI
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
@@ -18,9 +27,9 @@ fun optProp(key: String): String? = providers.gradleProperty(key).orNull
 
 val soundstageModId = prop("mod_id")
 val armalibVersion = prop("armalib_version")
-val isNeoForge = armalib.loader == dev.armadeus.armalib.gradle.Loader.NEOFORGE
-val isForge = armalib.loader == dev.armadeus.armalib.gradle.Loader.FORGE
-val isFabric = armalib.loader == dev.armadeus.armalib.gradle.Loader.FABRIC
+val isNeoForge = armalib.loader == Loader.NEOFORGE
+val isForge = armalib.loader == Loader.FORGE
+val isFabric = armalib.loader == Loader.FABRIC
 val is1201 = armalib.target.minecraft == "1.20.1"
 
 version = prop("mod_version")
@@ -44,8 +53,6 @@ sourceSets.named("main") {
 }
 
 val rig: SourceSet = sourceSets.getByName("rig")
-rig.java.setSrcDirs(listOf(rootProject.file("src/rig/java")))
-rig.resources.setSrcDirs(listOf(rootProject.file("src/rig/resources")))
 sourceSets.named("test") {
     java.setSrcDirs(listOf(rootProject.file("src/test/java")))
     resources.setSrcDirs(listOf(rootProject.file("src/test/resources")))
@@ -154,6 +161,39 @@ val publishChangelog = publishVersion.let { version ->
     lines.subList(start + 1, end).joinToString("\n").trim()
     }
 }
+val publishMinecraftVersions: Provider<List<String>> = run {
+    val built = armalib.target.minecraft
+    val range = if (isFabric) armalib.target.fabricMinecraftRange else null
+    providers.provider {
+        fun parts(v: String) = v.split('.').map { it.toIntOrNull() ?: 0 }
+        fun compare(a: String, b: String): Int {
+            val x = parts(a)
+            val y = parts(b)
+            for (i in 0 until maxOf(x.size, y.size)) {
+                val c = x.getOrElse(i) { 0 }.compareTo(y.getOrElse(i) { 0 })
+                if (c != 0) return c
+            }
+            return 0
+        }
+        val bounds = range?.let { Regex(""">=\s*(\S+)\s+<\s*(\S+)""").matchEntire(it.trim()) }
+        if (bounds == null) return@provider listOf(built)
+        val (low, high) = bounds.destructured
+        try {
+            val manifest = URI("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json").toURL().readText()
+            @Suppress("UNCHECKED_CAST")
+            val versions = (JsonSlurper().parseText(manifest) as Map<String, Any?>)["versions"] as List<Map<String, Any?>>
+            val releases = versions.filter { it["type"] == "release" }.map { it["id"] as String }
+                .filter { compare(it, low) >= 0 && compare(it, high) < 0 }
+                .sortedWith { a, b -> compare(a, b) }
+            if (built in releases) releases else releases + built
+        } catch (e: Exception) {
+            Logging.getLogger("soundstage-publish")
+                .warn("Mojang's version manifest could not be read ({}); tagging {} alone", e.toString(), built)
+            listOf(built)
+        }
+    }
+}
+
 publishMods {
     file.set(publishJar)
     version.set("$publishVersion+${project.name}")
@@ -169,7 +209,7 @@ publishMods {
     modrinth {
         accessToken.set(providers.environmentVariable("MODRINTH_TOKEN").orElse(providers.gradleProperty("modrinth.token")))
         projectId.set("BMMPW6ZA")
-        minecraftVersions.add(armalib.target.minecraft)
+        minecraftVersions.addAll(publishMinecraftVersions)
         environment.set(CLIENT_AND_SERVER)
         projectDescription.set(providers.fileContents(rootProject.layout.projectDirectory.file("docs/LISTING.md")).asText
             .map { it.substringAfter("\n").trimStart() })
@@ -178,7 +218,7 @@ publishMods {
     curseforge {
         accessToken.set(providers.environmentVariable("CURSEFORGE_TOKEN").orElse(providers.gradleProperty("curseforge.token")))
         projectId.set("1727017")
-        minecraftVersions.add(armalib.target.minecraft)
+        minecraftVersions.addAll(publishMinecraftVersions)
         javaVersions.add(when {
             is1201 -> JavaVersion.VERSION_17
             armalib.target.minecraft.startsWith("26.") -> JavaVersion.VERSION_25
@@ -192,8 +232,10 @@ publishMods {
 tasks.matching { it.name in setOf("publishMods", "publishModrinth", "publishCurseforge") }.configureEach {
     dependsOn("assemble", "checkReleaseJar")
     val snapshot = publishVersion.endsWith("-SNAPSHOT")
+    val minecraftVersions = publishMinecraftVersions
     doFirst {
         require(!snapshot) { "a -SNAPSHOT version is never uploaded to Modrinth or CurseForge" }
+        println("Minecraft versions tagged: ${minecraftVersions.get().joinToString()}")
     }
 }
 
@@ -202,7 +244,7 @@ armalibJarCheck {
     requiredFiles.put("META-INF/NOTICE", rootProject.file("NOTICE"))
 }
 
-if (isNeoForge || isForge) extensions.configure<net.neoforged.moddevgradle.dsl.ModDevExtension> {
+if (isNeoForge || isForge) extensions.configure<ModDevExtension> {
     if (!armalib.target.minecraft.startsWith("26.") && !is1201) parchment {
         minecraftVersion = prop("parchment_minecraft_version")
         mappingsVersion = prop("parchment_mappings_version")
@@ -234,7 +276,7 @@ val fabricAccessWidener: File = if (armalib.target.minecraft == "1.21.1")
     rootProject.file("src/main/resources/soundstage.accesswidener")
 else rootProject.file("src/main/accesswideners/${armalib.target.minecraft}.accesswidener")
 if (isFabric) {
-    extensions.configure<net.fabricmc.loom.api.LoomGradleExtensionAPI> {
+    extensions.configure<LoomGradleExtensionAPI> {
         mods.maybeCreate(soundstageModId).sourceSet(coreMain, project(":core"))
         accessWidenerPath.set(fabricAccessWidener)
     }
@@ -335,7 +377,7 @@ if (providers.gradleProperty("withIris").isPresent && irisDevMod != null) {
 
 if (isNeoForge && providers.gradleProperty("withResonance").isPresent) {
     val resonanceJarPath = optProp("resonanceJarPath")
-        ?: "${System.getProperty("user.home")}/.modcache/resonance/handoff/resonance-0.1.0+1.21.1-neoforge.jar"
+        ?: throw GradleException("-PwithResonance needs -PresonanceJarPath=<the Resonance jar>")
     dependencies {
         "runtimeOnly"(files(resonanceJarPath))
         "runtimeOnly"("dev.isxander:yet-another-config-lib:3.7.1+1.21.1-neoforge") {
@@ -380,8 +422,8 @@ tasks.named<ProcessResources>("processResources") {
             resourcesOut.walkTopDown()
                 .filter { it.isFile && it.extension == "json" && it.invariantSeparatorsPath.contains("/loot_table/") }
                 .forEach { file ->
-                    val json = groovy.json.JsonSlurper().parseText(file.readText())
-                    file.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(convert(json))))
+                    val json = JsonSlurper().parseText(file.readText())
+                    file.writeText(JsonOutput.prettyPrint(JsonOutput.toJson(convert(json))))
                 }
         }
     }
@@ -430,7 +472,7 @@ val generateRecipes = tasks.register("generateRecipes") {
         }
         source.listFiles { f -> f.extension == "json" }?.forEach { file ->
             @Suppress("UNCHECKED_CAST")
-            val json = groovy.json.JsonSlurper().parse(file) as MutableMap<String, Any>
+            val json = JsonSlurper().parse(file) as MutableMap<String, Any>
             @Suppress("UNCHECKED_CAST")
             (json["key"] as? Map<String, Any>)?.let { key ->
                 json["key"] = key.mapValues { (_, value) -> ingredient(value) }
@@ -444,7 +486,7 @@ val generateRecipes = tasks.register("generateRecipes") {
                 if (resultItem && "id" in result) result["item"] = result.remove("id")!!
             }
             File(out, file.name).writeText(
-                groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json)) + "\n")
+                JsonOutput.prettyPrint(JsonOutput.toJson(json)) + "\n")
         }
         println("soundstage: generated ${out.listFiles()?.size ?: 0} recipes" + (if (objectForm) " in the object form" else ""))
     }
@@ -452,12 +494,14 @@ val generateRecipes = tasks.register("generateRecipes") {
 
 val itemModelsGeneratedRoot: File = layout.buildDirectory.dir("generated/itemModels").get().asFile
 val specialItems = listOf("speaker", "satellite_speaker", "center_speaker", "subwoofer", "party_box", "receiver")
+val heldItems = listOf("remote")
 val plainItems = listOf("screen", "speaker_link")
 val generateItemModels = tasks.register("generateItemModels") {
     val modelDir = rootProject.file("src/main/resources/assets/$soundstageModId/models/item")
     val out = itemModelsGeneratedRoot
     val enabled = armalib.target.minecraft != "1.21.1" && !is1201
     val special = specialItems
+    val held = heldItems
     val plain = plainItems
     val modId = soundstageModId
     inputs.dir(modelDir)
@@ -470,10 +514,24 @@ val generateItemModels = tasks.register("generateItemModels") {
         val models = File(out, "assets/$modId/models/item").apply { mkdirs() }
         for (name in special) {
             @Suppress("UNCHECKED_CAST")
-            val json = groovy.json.JsonSlurper().parse(File(modelDir, "$name.json")) as MutableMap<String, Any>
+            val json = JsonSlurper().parse(File(modelDir, "$name.json")) as MutableMap<String, Any>
             json.remove("parent")
-            File(models, "$name.json").writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json)) + "\n")
-            File(items, "$name.json").writeText("""{"model": {"type": "minecraft:special", "base": "$modId:item/$name", "model": {"type": "$modId:block_item"}}}""" + "\n")
+            File(models, "$name.json").writeText(JsonOutput.prettyPrint(JsonOutput.toJson(json)) + "\n")
+            val blockItem = { inLevel: Boolean -> """{"type": "minecraft:special", "base": "$modId:item/$name", "model": {"type": "$modId:block_item", "level": $inLevel}}""" }
+            File(items, "$name.json").writeText("""{"model": {"type": "minecraft:select", "property": "minecraft:display_context", "cases": [{"when": ["thirdperson_righthand", "thirdperson_lefthand", "ground", "fixed", "head", "on_shelf"], "model": ${blockItem(true)}}], "fallback": ${blockItem(false)}}}""" + "\n")
+        }
+        for (name in held) {
+            @Suppress("UNCHECKED_CAST")
+            val json = JsonSlurper().parse(File(modelDir, "$name.json")) as MutableMap<String, Any>
+            json.remove("parent")
+            File(models, "$name.json").writeText(JsonOutput.prettyPrint(JsonOutput.toJson(json)) + "\n")
+            val model = { inHand: Boolean, inLevel: Boolean, icon: Boolean -> """{"type": "minecraft:special", "base": "$modId:item/$name", "model": {"type": "$modId:$name", "held": $inHand, "level": $inLevel, "icon": $icon}}""" }
+            val cases = listOf(
+                """{"when": ["firstperson_righthand", "firstperson_lefthand"], "model": ${model(true, false, false)}}""",
+                """{"when": ["thirdperson_righthand", "thirdperson_lefthand"], "model": ${model(true, true, false)}}""",
+                """{"when": ["ground", "fixed", "head", "on_shelf"], "model": ${model(false, true, false)}}""",
+                """{"when": ["gui"], "model": ${model(false, false, true)}}""")
+            File(items, "$name.json").writeText("""{"model": {"type": "minecraft:select", "property": "minecraft:display_context", "cases": [${cases.joinToString(", ")}], "fallback": ${model(false, false, false)}}}""" + "\n")
         }
         for (name in plain) {
             File(items, "$name.json").writeText("""{"model": {"type": "minecraft:model", "model": "$modId:item/$name"}}""" + "\n")
@@ -485,7 +543,7 @@ tasks.named<ProcessResources>("processResources") {
     dependsOn(generateItemModels)
     if (armalib.target.minecraft != "1.21.1" && !is1201) {
         val generatedPath = itemModelsGeneratedRoot.absolutePath
-        for (name in specialItems) {
+        for (name in specialItems + heldItems) {
             filesMatching("assets/$soundstageModId/models/item/$name.json") {
                 if (!file.absolutePath.startsWith(generatedPath)) exclude()
             }
@@ -512,7 +570,7 @@ val generateLootTables1201 = tasks.register("generateLootTables1201") {
             if (!tables.isDirectory) return@forEach
             tables.walkTopDown().filter { it.isFile && it.extension == "json" }.forEach { file ->
                 @Suppress("UNCHECKED_CAST")
-                val json = groovy.json.JsonSlurper().parse(file) as MutableMap<String, Any>
+                val json = JsonSlurper().parse(file) as MutableMap<String, Any>
                 fun strip(node: Any?) {
                     when (node) {
                         is MutableMap<*, *> -> {
@@ -529,7 +587,7 @@ val generateLootTables1201 = tasks.register("generateLootTables1201") {
                 strip(json)
                 val target = File(out, "data/${namespace.name}/loot_tables/${file.relativeTo(tables).path}")
                 target.parentFile.mkdirs()
-                target.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json)) + "\n")
+                target.writeText(JsonOutput.prettyPrint(JsonOutput.toJson(json)) + "\n")
             }
         }
     }
@@ -561,7 +619,7 @@ tasks.named<Test>("test") {
     workingDir = rootProject.projectDir
     testLogging {
         events("failed")
-        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        exceptionFormat = TestExceptionFormat.FULL
     }
 }
 
@@ -652,7 +710,7 @@ val checkSoundstageNotices = tasks.register("checkSoundstageNotices") {
         val jar = releaseJar.get().asFile
         fun json(text: String): Map<String, Any> {
             @Suppress("UNCHECKED_CAST")
-            return groovy.json.JsonSlurper().parseText(text) as Map<String, Any>
+            return JsonSlurper().parseText(text) as Map<String, Any>
         }
         val (entries, nested) = ZipFile(jar).use { zip ->
             fun read(name: String) = zip.getEntry(name)?.let { zip.getInputStream(it).readBytes().toString(Charsets.UTF_8) }
@@ -709,11 +767,11 @@ val checkSoundstageNotices = tasks.register("checkSoundstageNotices") {
         val removed = nested.first()
         val red = problems(text.replace(removed, ""))
         if (red.none { it.contains(removed) }) {
-            throw GradleException("red control passed: with $removed removed from the notices the check " +
+            throw GradleException("planted fault not caught: with $removed removed from the notices the check " +
                 "reported nothing about it")
         }
         println("checkSoundstageNotices: ${jar.name} OK, ${nested.size} nested jars named: ${nested.joinToString()}")
-        println("checkSoundstageNotices: red control ($removed removed from the notices) failed as it must: ${red.first { it.contains(removed) }}")
+        println("checkSoundstageNotices: planted fault ($removed removed from the notices) caught as it must be: ${red.first { it.contains(removed) }}")
     }
 }
 tasks.named("check") { dependsOn(checkSoundstageNotices) }
@@ -766,9 +824,9 @@ val checkShippedLicenceRedControl = tasks.register("checkShippedLicenceRedContro
         for ((what, path, copy) in controls) {
             val found = requiredProblems(copy).filter { path in it }
             if (found.isEmpty()) {
-                throw GradleException("red control '$what' passed: the licence rule reported nothing for ${copy.name}")
+                throw GradleException("planted fault '$what' not caught: the licence rule reported nothing for ${copy.name}")
             }
-            println("checkShippedLicenceRedControl: red control '$what' failed the check as it must: ${found.first()}")
+            println("checkShippedLicenceRedControl: planted fault '$what' caught as it must be: ${found.first()}")
         }
     }
 }

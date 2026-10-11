@@ -18,12 +18,21 @@ public final class WebMediaCommand {
         return forRelay(MediaProbe.command(ffprobe, input(relay)), relay);
     }
 
-    public static List<String> transcode(String ffmpeg, URI relay, long startMillis, int maxHeight,
+    public static List<String> transcode(String ffmpeg, URI relay, long startMillis, PictureSize.Copy picture,
                                          MediaProbe probe, boolean toneMap) {
-        return forRelay(FfmpegCommand.transcode(ffmpeg, input(relay), startMillis, maxHeight, probe, toneMap), relay);
+        return forRelay(FfmpegCommand.transcode(ffmpeg, input(relay), startMillis, picture, probe, toneMap), relay,
+                DEMUXERS);
+    }
+
+    public static List<String> still(String ffmpeg, URI relay, StillImage.Type type, PictureSize.Copy picture) {
+        return forRelay(FfmpegCommand.still(ffmpeg, input(relay), type, picture), relay, type.demuxer);
     }
 
     private static List<String> forRelay(List<String> shipped, URI relay) {
+        return forRelay(shipped, relay, DEMUXERS);
+    }
+
+    private static List<String> forRelay(List<String> shipped, URI relay, String demuxers) {
         String url = input(relay);
         int at = shipped.indexOf(url);
         if (at < 0 || shipped.lastIndexOf(url) != at || shipped.indexOf("-i") != shipped.lastIndexOf("-i")) {
@@ -40,7 +49,7 @@ public final class WebMediaCommand {
                     args.add(PROTOCOLS);
                 }
                 args.add("-format_whitelist");
-                args.add(DEMUXERS);
+                args.add(demuxers);
                 args.add("-rw_timeout");
                 args.add(READ_TIMEOUT_MICROS);
             }

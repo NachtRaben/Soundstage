@@ -21,7 +21,7 @@ Just want music somewhere? The Party Box is a receiver and speaker in one block.
 
 There are five: the Speaker, the Satellite Speaker, the Center Speaker, the Subwoofer and the Party Box.
 
-You can aim each one, set how far it carries and turn it up or down on its own. Give them channels and you can run anything from plain stereo to full 5.1 with a center, surrounds and a sub. However big the build gets, every speaker on a receiver stays in sync, so nothing echoes.
+You can aim each one, set how far it carries and turn it up or down on its own. Give them channels and you can run anything from plain stereo to full 5.1 with a center, surrounds and a sub. However big the build gets, the speakers on a receiver play in step with each other, unless you give one a delay on purpose.
 
 Cabinets can be any wood, concrete, terracotta or glass, and grilles come in every wool colour. Right-click a speaker with the block you want. In a glass cabinet you can watch the speaker working.
 
@@ -51,13 +51,15 @@ Paste a link, or search with a prefix:
 
 Put Screen blocks side by side on a wall and they join into one display, up to 16 by 16 blocks. YouTube videos, Twitch streams and films play in sync with the sound, and films and YouTube videos can show subtitles: in your language, or whichever track you pick. Songs get a now-playing card instead, with the cover art, a live visualiser and the time.
 
+Screens make good signs too. Videos without sound play, and a picture (PNG or JPEG) from the media folder, or from a link where the server allows direct links, stays up until it's skipped, or moves on after a few seconds when something is queued behind it. Queue a few pictures and loop them for a slideshow.
+
 ![A film with subtitles on a display](https://cdn.modrinth.com/data/BMMPW6ZA/images/584457f7ee932a7a63d5754fbe256a74511872b0.webp)
 
 *Tears of Steel, © Blender Foundation, CC BY 3.0.*
 
 ![The now-playing card on a display](https://cdn.modrinth.com/data/BMMPW6ZA/images/eeae76a2912c53609f1d4288eb924a28079a6c83.webp)
 
-A screen nobody's looking at doesn't decode anything, so a big wall doesn't cost you frames while you're facing the other way.
+A screen you're not looking at isn't sent its picture, so a big wall costs less while you face the other way. Its sound carries on.
 
 ## Best with headphones
 
@@ -72,7 +74,9 @@ I've tried both with Soundstage on 1.21.1 NeoForge, and the speakers stay in syn
 
 ## The receiver
 
-Everything lives on the receiver's screen: what's playing, the queue, your displays, your speakers and their channels, and settings. Volume goes up to 200% and still won't distort. For films there's Levelling, which brings quiet dialogue up and keeps explosions down. Lock it and nobody but you (and server operators) can touch your setup.
+Everything lives on the receiver's screen: what's playing, the queue, your displays, your speakers and their channels, and settings. Volume goes up to 200%, and the loudest moments are turned down rather than clipping. For films there's Levelling, which brings quiet dialogue up and keeps explosions down. Films and videos with more than one language, including YouTube's dubbed videos, can switch language from the Playing tab, and the receiver remembers your choice for what plays next. Lock it and nobody but you (and server operators) can touch your setup.
+
+A Remote opens the receiver's screen from across the room. Sneak and use it on the receiver to link it; after that, using it anywhere within 96 blocks in the same dimension opens that receiver's screen. It matches the receiver's finish and lights up with it.
 
 ![The receiver with its valves glowing](https://cdn.modrinth.com/data/BMMPW6ZA/images/2ded0bd8e91ceaa0aee33f15ca4fdf7f325c77e1.webp)
 
@@ -89,9 +93,9 @@ Install it on the server and on every player's game.
 
 ## Running a server
 
-The defaults are meant for servers with players you don't know. Players can't point your server at arbitrary web addresses or anything on your home network, and only 16 receivers can play at once. You can change all of it in `config/soundstage.aon`.
+The defaults are meant for servers with players you don't know. Players can't point your server at arbitrary web addresses or anything on your home network, and only 16 receivers can play at once. You can change all of it in `config/soundstage.aon`. Video only goes to players looking at a screen, and if the server can't keep up, the picture quality drops first so the sound keeps going.
 
-Pictures, subtitles and 5.1 need ffmpeg on the server. Without it everything still plays with sound only, except Twitch, which shows its picture anyway. If you'd rather not install ffmpeg yourself, turn on `downloadFfmpeg` and Soundstage fetches a checked copy (Linux and Windows).
+Video pictures, still pictures, subtitles, 5.1 surround and language choice need ffmpeg on the server. Without it, music and the sound of videos still play, and some Twitch streams still show their picture. If you'd rather not install ffmpeg yourself, turn on `downloadFfmpeg` and Soundstage fetches a checked copy (Linux and Windows).
 
 If YouTube starts blocking your server, an operator can run `/soundstage oauth` and sign in with a spare Google account.
 

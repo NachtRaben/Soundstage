@@ -34,14 +34,27 @@ public final class YoutubeVideoFormats {
     }
 
     public static Optional<Choice> choose(List<StreamFormat> formats, int targetHeight, boolean surround) {
+        return choose(formats, targetHeight, surround, null);
+    }
+
+    public static Optional<StreamFormat> chooseSound(List<StreamFormat> formats, boolean surround,
+                                                     YoutubeAudioTracks.Track track) {
         List<StreamFormat> sounds = formats.stream().filter(YoutubeVideoFormats::isSound).toList();
-        boolean anyDefault = sounds.stream().anyMatch(StreamFormat::isDefaultAudioTrack);
         Comparator<StreamFormat> soundOrder = Comparator.comparing(StreamFormat::isDrc)
                 .thenComparing(f -> surround ? f.getAudioChannels() < 6 : f.getAudioChannels() > 2)
                 .thenComparing(Comparator.comparingLong(StreamFormat::getBitrate).reversed());
-        Optional<StreamFormat> audio = sounds.stream()
+        if (track != null) {
+            return sounds.stream().filter(f -> YoutubeAudioTracks.carries(f, track)).min(soundOrder);
+        }
+        boolean anyDefault = sounds.stream().anyMatch(StreamFormat::isDefaultAudioTrack);
+        return sounds.stream()
                 .filter(f -> !anyDefault || f.isDefaultAudioTrack())
                 .min(soundOrder);
+    }
+
+    public static Optional<Choice> choose(List<StreamFormat> formats, int targetHeight, boolean surround,
+                                          YoutubeAudioTracks.Track track) {
+        Optional<StreamFormat> audio = chooseSound(formats, surround, track);
         if (audio.isEmpty()) return Optional.empty();
 
         List<StreamFormat> pictures = formats.stream().filter(f -> codecRank(f) != NOT_A_PICTURE).toList();

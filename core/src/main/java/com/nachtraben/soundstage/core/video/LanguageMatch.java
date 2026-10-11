@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.MissingResourceException;
 import java.util.Optional;
 import java.util.function.Function;
 
@@ -17,7 +18,7 @@ public final class LanguageMatch {
             Locale locale = new Locale(two);
             try {
                 THREE_TO_TWO.put(locale.getISO3Language(), two);
-            } catch (java.util.MissingResourceException ignored) {
+            } catch (MissingResourceException ignored) {
             }
         }
         String[][] bibliographic = {

@@ -1,5 +1,8 @@
 package com.nachtraben.soundstage.client.audio;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -9,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 
 public final class LinuxShareOutput {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("Soundstage");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Soundstage");
 
     public static final String SINK_NAME = "Soundstage";
     public static final String COMMAND =

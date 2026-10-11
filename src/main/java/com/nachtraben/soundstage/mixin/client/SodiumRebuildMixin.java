@@ -26,7 +26,6 @@ abstract class SodiumRebuildMixin {
     //?}
     private boolean soundstage$keepRequestAfterFirstSnapshot(RenderSection section, Operation<Boolean> isBuilt) {
         if (isBuilt.call(section)) return true;
-        if (com.nachtraben.soundstage.client.render.SodiumRebuilds.DROPPED) return false;
         //? if <1.21.11 {
         return section.getPendingUpdate() == null;
         //?} else {

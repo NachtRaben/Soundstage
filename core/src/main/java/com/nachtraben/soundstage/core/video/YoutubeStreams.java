@@ -14,6 +14,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 public final class YoutubeStreams {
 
@@ -26,7 +27,8 @@ public final class YoutubeStreams {
 
         public Streams(URI video, StreamContainer videoContainer, URI audio, StreamContainer audioContainer,
                        int videoHeight, int chosenFor, String client, int audioChannels) {
-            this(video, videoContainer, audio, audioContainer, videoHeight, chosenFor, client, audioChannels, List.of());
+            this(video, videoContainer, audio, audioContainer, videoHeight, chosenFor, client,
+                    audioChannels, List.of());
         }
 
         public Streams(URI video, StreamContainer videoContainer, URI audio, StreamContainer audioContainer,
@@ -48,6 +50,99 @@ public final class YoutubeStreams {
 
     public static Streams resolve(YoutubeAudioSourceManager source, String videoId, int targetHeight,
                                   Object userData, boolean surround) throws IOException {
+        return resolve(source, videoId, targetHeight, userData, surround, null);
+    }
+
+    public static List<YoutubeAudioTracks.Track> audioTracks(YoutubeAudioSourceManager source, String videoId,
+                                                             Object userData) {
+        List<YoutubeAudioTracks.Track> kept = audioTracksKept(source, videoId);
+        if (kept != null) return kept;
+        try (HttpInterface http = source.getInterface()) {
+            injectToken(http, userData);
+            for (Client client : source.getClients()) {
+                if (!(client instanceof YoutubeAudioTracks.Source) || !client.supportsFormatLoading()) continue;
+                http.getContext().setAttribute(Client.OAUTH_CLIENT_ATTRIBUTE, client.supportsOAuth());
+                try {
+                    client.loadFormats(source, http, videoId);
+                } catch (CannotBeLoaded | Exception | LinkageError ignored) {
+                }
+                List<YoutubeAudioTracks.Track> asked = audioTracksKept(source, videoId);
+                return asked == null ? List.of() : asked;
+            }
+        } catch (IOException e) {
+            return List.of();
+        }
+        return List.of();
+    }
+
+    public static AutoCloseable whenAudioTracksSeen(YoutubeAudioSourceManager source, String videoId,
+                                                    Consumer<List<YoutubeAudioTracks.Track>> seen) {
+        List<AutoCloseable> watching = new ArrayList<>();
+        for (Client client : source.getClients()) {
+            if (client instanceof YoutubeAudioTracks.Source kept) watching.add(kept.whenSeen(videoId, seen));
+        }
+        return () -> {
+            for (AutoCloseable watch : watching) watch.close();
+        };
+    }
+
+    public static List<YoutubeAudioTracks.Track> audioTracksKept(YoutubeAudioSourceManager source, String videoId) {
+        for (Client client : source.getClients()) {
+            if (client instanceof YoutubeAudioTracks.Source kept) {
+                List<YoutubeAudioTracks.Track> tracks = kept.audioTracksOf(videoId);
+                if (tracks != null) return tracks;
+            }
+        }
+        return null;
+    }
+
+    public static Streams resolveSound(YoutubeAudioSourceManager source, String videoId, Object userData,
+                                       boolean surround, YoutubeAudioTracks.Track track) throws IOException {
+        List<String> failures = new ArrayList<>();
+        try (HttpInterface http = source.getInterface()) {
+            injectToken(http, userData);
+            for (Client client : source.getClients()) {
+                if (!client.supportsFormatLoading()) continue;
+                http.getContext().setAttribute(Client.OAUTH_CLIENT_ATTRIBUTE, client.supportsOAuth());
+                String name = client.getIdentifier();
+                try {
+                    TrackFormats formats = client.loadFormats(source, http, videoId);
+                    if (formats == null) {
+                        failures.add(name + ": no formats");
+                        continue;
+                    }
+                    Optional<StreamFormat> sound =
+                            YoutubeVideoFormats.chooseSound(formats.getFormats(), surround, track);
+                    if (sound.isEmpty()) {
+                        failures.add(name + ": no sound-only stream" + (track == null ? "" : " in " + track.label()));
+                        continue;
+                    }
+                    Optional<StreamContainer> container = containerOf(sound.get());
+                    if (container.isEmpty()) {
+                        failures.add(name + ": a stream in a container other than MP4 or WebM");
+                        continue;
+                    }
+                    URI audio = playbackUrl(source, http, client, formats, sound.get());
+                    if (!YoutubeStreamUrls.isAcceptable(audio)) {
+                        failures.add(name + ": a stream not on https://*.googlevideo.com");
+                        continue;
+                    }
+                    return new Streams(null, null, audio, container.get(), 0, 0, name,
+                            (int) sound.get().getAudioChannels());
+                } catch (CannotBeLoaded e) {
+                    failures.add(name + ": " + describe(e.getCause() != null ? e.getCause() : e));
+                } catch (Exception e) {
+                    failures.add(name + ": " + describe(e));
+                }
+            }
+        }
+        throw new IOException(failures.isEmpty() ? "no client of this YouTube source loads formats"
+                : String.join("; ", failures));
+    }
+
+    public static Streams resolve(YoutubeAudioSourceManager source, String videoId, int targetHeight,
+                                  Object userData, boolean surround, YoutubeAudioTracks.Track track)
+            throws IOException {
         List<String> failures = new ArrayList<>();
         try (HttpInterface http = source.getInterface()) {
             injectToken(http, userData);
@@ -62,7 +157,7 @@ public final class YoutubeStreams {
                         continue;
                     }
                     Optional<YoutubeVideoFormats.Choice> choice =
-                            YoutubeVideoFormats.choose(formats.getFormats(), targetHeight, surround);
+                            YoutubeVideoFormats.choose(formats.getFormats(), targetHeight, surround, track);
                     if (choice.isEmpty()) {
                         failures.add(name + ": no picture-only and sound-only pair among "
                                 + formats.getFormats().size() + " formats");

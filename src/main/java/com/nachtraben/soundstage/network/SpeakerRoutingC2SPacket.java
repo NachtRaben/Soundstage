@@ -11,9 +11,9 @@ import net.minecraft.network.codec.StreamCodec;
 import org.jetbrains.annotations.NotNull;
 
 @RequiredArgsConstructor
-public class SpeakerRoutingC2SPacket implements CustomPacketPayload
-{
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "speaker_routing_c2s");
+public class SpeakerRoutingC2SPacket implements CustomPacketPayload {
+    public static final ResourceLocation ID =
+            ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "speaker_routing_c2s");
     public static final Type<SpeakerRoutingC2SPacket> TYPE = new Type<>(ID);
     public static final StreamCodec<FriendlyByteBuf, SpeakerRoutingC2SPacket> STREAM_CODEC = StreamCodec.ofMember(
         SpeakerRoutingC2SPacket::write, SpeakerRoutingC2SPacket::new

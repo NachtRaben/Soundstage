@@ -5,8 +5,9 @@ import com.nachtraben.soundstage.audio.video.ScreenDisplays;
 import com.nachtraben.soundstage.core.video.DisplayLayout;
 import com.nachtraben.soundstage.core.video.EpochCache;
 import com.nachtraben.soundstage.registry.ModBlockEntities;
-import dev.armadeus.armalib.platform.block.SaveView;
 import com.nachtraben.soundstage.util.WorldAccess;
+import dev.armadeus.armalib.platform.block.LoadAware;
+import dev.armadeus.armalib.platform.block.SaveView;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -29,7 +30,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class ScreenBlockEntity extends BlockEntity implements dev.armadeus.armalib.platform.block.LoadAware {
+public class ScreenBlockEntity extends BlockEntity implements LoadAware {
 
     public static final int AUDIENCE_RANGE = 64;
 
@@ -131,13 +132,15 @@ public class ScreenBlockEntity extends BlockEntity implements dev.armadeus.armal
     }
     *///?} else if >=1.20.5 {
     @Override
-    protected void saveAdditional(net.minecraft.nbt.CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+    protected void saveAdditional(net.minecraft.nbt.CompoundTag tag,
+            net.minecraft.core.HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         save(SaveView.writer(tag));
     }
 
     @Override
-    protected void loadAdditional(net.minecraft.nbt.CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+    protected void loadAdditional(net.minecraft.nbt.CompoundTag tag,
+            net.minecraft.core.HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         load(SaveView.reader(tag));
     }
@@ -202,10 +205,18 @@ public class ScreenBlockEntity extends BlockEntity implements dev.armadeus.armal
             if (receiverPos != null) {
                 DisplayLayout layout = getDisplayLayout();
                 if (layout != null) {
-                    ScreenDisplays.publish(serverLevel, pos, layout.heightCells());
+                    ScreenDisplays.publish(serverLevel, pos, layout.widthCells(), layout.heightCells(),
+                            anchorFitMode(level, pos, state, layout) == FitMode.FILL);
                 }
             }
         }
+    }
+
+    private FitMode anchorFitMode(Level level, BlockPos pos, BlockState state, DisplayLayout layout) {
+        BlockPos anchor = anchorPosition(pos, state.getValue(ScreenBlock.FACING), layout);
+        if (anchor.equals(pos)) return fitMode;
+        return WorldAccess.blockEntityIfLoaded(level, anchor) instanceof ScreenBlockEntity screen
+                ? screen.getFitMode() : fitMode;
     }
 
     private void publishAudience(ServerLevel level, BlockPos pos) {

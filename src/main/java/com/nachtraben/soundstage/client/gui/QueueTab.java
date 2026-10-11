@@ -1,13 +1,14 @@
 package com.nachtraben.soundstage.client.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
+import com.nachtraben.soundstage.network.QueueOpC2SPacket;
+import com.nachtraben.soundstage.network.SpeakerControlC2SPacket;
 import dev.armadeus.armalib.ui.ScrollingText;
 import dev.armadeus.armalib.ui.UiButton;
 import dev.armadeus.armalib.ui.UiDraw;
 import dev.armadeus.armalib.ui.UiGraphics;
 import dev.armadeus.armalib.ui.UiIcon;
 import dev.armadeus.armalib.ui.UiText;
-import com.nachtraben.soundstage.network.QueueOpC2SPacket;
-import com.nachtraben.soundstage.network.SpeakerControlC2SPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
@@ -61,7 +62,8 @@ final class QueueTab extends ReceiverTab {
         }
         Component add = Component.translatable("gui.soundstage.player.add");
         int addWidth = UiButton.widthFor(add, true, 9, 8);
-        screen.addTabWidget(new UiButton(THEME, buttonRight - addWidth, top + ADD_Y, addWidth, ADD_HEIGHT, UiButton.Look.PRIMARY,
+        screen.addTabWidget(
+                new UiButton(THEME, buttonRight - addWidth, top + ADD_Y, addWidth, ADD_HEIGHT, UiButton.Look.PRIMARY,
                 this::queueTyped).icon(UiIcon.PLUS).iconSize(9).label(add)
                 .enabled(() -> sourceField != null && !sourceField.getValue().isBlank()));
         int fieldLeft = x + AudioPlayerScreen.PADDING;
@@ -76,8 +78,10 @@ final class QueueTab extends ReceiverTab {
         sourceField.setResponder(value -> screen.draftSource = value);
         screen.addTabWidget(sourceField);
 
-        int clearWidth = UiButton.widthFor(Component.translatable("gui.soundstage.receiver.clear_confirm"), false, 0, 3);
-        screen.addTabWidget(new UiButton(THEME, right - clearWidth, top + LIST_HEADING_Y - 3, clearWidth, 14, UiButton.Look.LINK,
+        int clearWidth =
+                UiButton.widthFor(Component.translatable("gui.soundstage.receiver.clear_confirm"), false, 0, 3);
+        screen.addTabWidget(
+                new UiButton(THEME, right - clearWidth, top + LIST_HEADING_Y - 3, clearWidth, 14, UiButton.Look.LINK,
                 this::clearPressed).label(this::clearLabel).accent(THEME.danger())
                 .enabled(() -> !screen.queue.isEmpty()));
         screen.addTabWidget(screen.loopButton(right - clearWidth - 4 - 16, top + LIST_HEADING_Y - 4, 16));
@@ -85,7 +89,8 @@ final class QueueTab extends ReceiverTab {
     }
 
     private Component clearLabel() {
-        return Component.translatable(armed() ? "gui.soundstage.receiver.clear_confirm" : "gui.soundstage.receiver.clear");
+        return Component.translatable(armed() ? "gui.soundstage.receiver.clear_confirm"
+                : "gui.soundstage.receiver.clear");
     }
 
     private boolean armed() {
@@ -111,7 +116,7 @@ final class QueueTab extends ReceiverTab {
     @Override
     boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (sourceField != null && sourceField.isFocused()
-                && (keyCode == com.mojang.blaze3d.platform.InputConstants.KEY_RETURN || keyCode == com.mojang.blaze3d.platform.InputConstants.KEY_NUMPADENTER)) {
+                && (keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER)) {
             queueTyped();
             return true;
         }
@@ -166,8 +171,8 @@ final class QueueTab extends ReceiverTab {
             int textRight = hovered && controllable ? actionX(3) - 4 : right - 2;
             if (hovered) {
                 anyHovered = true;
-                hoveredRowLine.draw(g, font, entry, Component.literal(entry), textLeft, rowTop + 4, textRight - textLeft,
-                        THEME.text());
+                hoveredRowLine.draw(g, font, entry, Component.literal(entry), textLeft, rowTop + 4,
+                        textRight - textLeft, THEME.text());
             } else {
                 g.text(font, UiText.ellipsize(font, entry, textRight - textLeft), textLeft, rowTop + 4, THEME.text());
             }

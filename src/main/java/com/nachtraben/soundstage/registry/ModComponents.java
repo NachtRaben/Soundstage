@@ -20,10 +20,17 @@ public class ModComponents {
                     .networkSynchronized(SpeakerFinish.STREAM_CODEC)
                     .build());
 
-    public static final RegistryEntry<DataComponentType<com.nachtraben.soundstage.block.speaker.SpeakerSettings>> SPEAKER_SETTINGS =
-            COMPONENTS.register("speaker_settings", () -> DataComponentType.<com.nachtraben.soundstage.block.speaker.SpeakerSettings>builder()
-                    .persistent(com.nachtraben.soundstage.block.speaker.SpeakerSettings.CODEC)
-                    .networkSynchronized(com.nachtraben.soundstage.block.speaker.SpeakerSettings.STREAM_CODEC)
+    public static final RegistryEntry<DataComponentType<com.nachtraben.soundstage.block.speaker.SpeakerSettings>>
+            SPEAKER_SETTINGS = COMPONENTS.register("speaker_settings",
+                    () -> DataComponentType.<com.nachtraben.soundstage.block.speaker.SpeakerSettings>builder()
+                            .persistent(com.nachtraben.soundstage.block.speaker.SpeakerSettings.CODEC)
+                            .networkSynchronized(com.nachtraben.soundstage.block.speaker.SpeakerSettings.STREAM_CODEC)
+                            .build());
+
+    public static final RegistryEntry<DataComponentType<net.minecraft.core.GlobalPos>> REMOTE_LINK =
+            COMPONENTS.register("remote_link", () -> DataComponentType.<net.minecraft.core.GlobalPos>builder()
+                    .persistent(net.minecraft.core.GlobalPos.CODEC)
+                    .networkSynchronized(net.minecraft.core.GlobalPos.STREAM_CODEC)
                     .build());
     //?}
 

@@ -2,14 +2,16 @@ package com.nachtraben.soundstage.core.video;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 public record Fmp4Init(Video video, Audio audio, Map<Integer, Defaults> defaults) {
 
-    public record Video(int trackId, long timescale, List<byte[]> sps, List<byte[]> pps, int nalLengthSize) {
+    public record Video(int trackId, long timescale, boolean hevc, List<byte[]> parameterSets, int nalLengthSize) {
     }
 
     public record Audio(int trackId, long timescale, int profile, int frequencyIndex, int channels) {
@@ -46,7 +48,7 @@ public record Fmp4Init(Video video, Audio audio, Map<Integer, Defaults> defaults
                 }
             }
         }
-        if (video == null && audio == null) throw new IOException("the init segment has neither H.264 nor AAC");
+        if (video == null && audio == null) throw new IOException("the init segment has neither a picture nor AAC");
         return new Fmp4Init(video, audio, Map.copyOf(defaults));
     }
 
@@ -76,6 +78,10 @@ public record Fmp4Init(Video video, Audio audio, Map<Integer, Defaults> defaults
             Box avcC = Box.find(data, entry.contentStart() + 78, entry.end(), "avcC");
             return avcC == null ? null : video(data, avcC, trackId, timescale);
         }
+        if (entry.is("hvc1") || entry.is("hev1")) {
+            Box hvcC = Box.find(data, entry.contentStart() + 78, entry.end(), "hvcC");
+            return hvcC == null ? null : hevcVideo(data, hvcC, trackId, timescale);
+        }
         if (entry.is("mp4a")) {
             Box esds = Box.find(data, entry.contentStart() + 28, entry.end(), "esds");
             return esds == null ? null : audio(data, esds, trackId, timescale);
@@ -93,15 +99,37 @@ public record Fmp4Init(Video video, Audio audio, Map<Integer, Defaults> defaults
         List<byte[]> sps = parameterSets(b, b.get() & 0x1F);
         List<byte[]> pps = parameterSets(b, b.get() & 0xFF);
         if (sps.isEmpty() || pps.isEmpty()) throw new IOException("the H.264 track has no SPS or PPS");
-        return new Video(trackId, timescale, sps, pps, nalLengthSize);
+        List<byte[]> sets = new ArrayList<>(sps);
+        sets.addAll(pps);
+        return new Video(trackId, timescale, false, List.copyOf(sets), nalLengthSize);
+    }
+
+    private static Video hevcVideo(byte[] data, Box hvcC, int trackId, long timescale) throws IOException {
+        ByteBuffer b = hvcC.content(data);
+        if (b.remaining() < 23) throw new IOException("hvcC cut short");
+        b.position(21);
+        int nalLengthSize = (b.get() & 0x03) + 1;
+        int arrays = b.get() & 0xFF;
+        TreeMap<Integer, List<byte[]>> byType = new TreeMap<>();
+        for (int i = 0; i < arrays; i++) {
+            if (b.remaining() < 3) throw new IOException("hvcC cut short");
+            int type = b.get() & 0x3F;
+            int count = b.getShort() & 0xFFFF;
+            List<byte[]> nals = parameterSets(b, count);
+            if (type >= 32 && type <= 34) byType.computeIfAbsent(type, t -> new ArrayList<>()).addAll(nals);
+        }
+        if (byType.size() < 3) throw new IOException("the HEVC track lacks a VPS, SPS or PPS");
+        List<byte[]> sets = new ArrayList<>();
+        byType.values().forEach(sets::addAll);
+        return new Video(trackId, timescale, true, List.copyOf(sets), nalLengthSize);
     }
 
     private static List<byte[]> parameterSets(ByteBuffer b, int count) throws IOException {
         List<byte[]> sets = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            if (b.remaining() < 2) throw new IOException("avcC cut short");
+            if (b.remaining() < 2) throw new IOException("a parameter set runs past its box");
             int length = b.getShort() & 0xFFFF;
-            if (b.remaining() < length) throw new IOException("avcC cut short");
+            if (b.remaining() < length) throw new IOException("a parameter set runs past its box");
             byte[] set = new byte[length];
             b.get(set);
             sets.add(set);
@@ -229,7 +257,7 @@ public record Fmp4Init(Video video, Audio audio, Map<Integer, Defaults> defaults
 
         static Box at(byte[] data, int at, int to) throws IOException {
             long size = Integer.toUnsignedLong(ByteBuffer.wrap(data, at, 4).getInt());
-            String type = new String(data, at + 4, 4, java.nio.charset.StandardCharsets.ISO_8859_1);
+            String type = new String(data, at + 4, 4, StandardCharsets.ISO_8859_1);
             int header = 8;
             if (size == 1) {
                 if (at + 16 > to) throw new IOException("box " + type + " cut short");

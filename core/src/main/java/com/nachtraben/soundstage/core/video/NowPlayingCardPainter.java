@@ -169,7 +169,8 @@ public final class NowPlayingCardPainter {
             double h = bars != null && i < bars.length ? Math.max(0, Math.min(1, bars[i])) : 0;
             float barHeight = (float) Math.max(height * 0.004, h * maxHeight);
             float x = left + i * slot + (slot - barWidth) / 2f;
-            g.fill(new RoundRectangle2D.Float(x, bottom - barHeight, barWidth, barHeight, barWidth * 0.5f, barWidth * 0.5f));
+            g.fill(new RoundRectangle2D.Float(x, bottom - barHeight, barWidth, barHeight, barWidth * 0.5f,
+                    barWidth * 0.5f));
         }
     }
 

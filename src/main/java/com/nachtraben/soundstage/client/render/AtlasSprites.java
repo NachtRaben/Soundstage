@@ -18,7 +18,7 @@ final class AtlasSprites {
     private static final ResourceLocation CONE =
             ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "block/subwoofer_cone");
 
-    private static TextureAtlasSprite sprite(ResourceLocation id) {
+    static TextureAtlasSprite sprite(ResourceLocation id) {
         //? if >=1.21.11 {
         /*return Minecraft.getInstance().getAtlasManager()
                 .getAtlasOrThrow(ResourceLocation.withDefaultNamespace("blocks")).getSprite(id);

@@ -5,8 +5,9 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.nachtraben.soundstage.SoundstageInit;
 import com.nachtraben.soundstage.block.IAudioReceiver;
 import com.nachtraben.soundstage.block.PartyBoxBlockEntity;
+import com.nachtraben.soundstage.block.speaker.SpeakerFinish;
+import com.nachtraben.soundstage.core.KnobSweep;
 import com.nachtraben.soundstage.core.SpeakerGeometry;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
@@ -50,13 +51,13 @@ final class PartyBoxRenderer {
     private static final int POINTER_RGB = 0xE8E0C2;
     private static final int METER_SEGMENTS = 12;
 
-    private record BoxStaticKey(com.nachtraben.soundstage.block.speaker.SpeakerFinish finish, boolean grille,
+    private record BoxStaticKey(SpeakerFinish finish, boolean grille,
                                 int light, int overlay) {}
 
-    private record BoxIdleKey(com.nachtraben.soundstage.block.speaker.SpeakerFinish finish, boolean grille,
+    private record BoxIdleKey(SpeakerFinish finish, boolean grille,
                               int light, int overlay) {}
 
-    private record BoxQuietKey(com.nachtraben.soundstage.block.speaker.SpeakerFinish finish, boolean grille,
+    private record BoxQuietKey(SpeakerFinish finish, boolean grille,
                                float volume, int loopMode, boolean shuffle, boolean locked,
                                int light, int overlay) {}
 
@@ -85,9 +86,8 @@ final class PartyBoxRenderer {
         float volume = box.getVolume() / (float) IAudioReceiver.MAX_VOLUME;
         int loopMode = box.getLoopMode();
         boolean shuffle = box.isShuffle();
-        boolean locked = box.isLocked() && !com.nachtraben.soundstage.RigStaging.fault("lock-unread");
-        Boolean previewPlaying = RenderPreview.partyPlaying;
-        boolean playing = previewPlaying != null ? previewPlaying : box.isPlaying();
+        boolean locked = box.isLocked();
+        boolean playing = box.isPlaying();
         boolean clear = finish.isTransparent();
         float pipeZ = grille ? SLAB.grilleFrontZ() - 0.04f : baffleZ - 0.10f;
         float pipeFill = Math.max(level, peak * 0.82f);
@@ -102,7 +102,8 @@ final class PartyBoxRenderer {
                         WooferRenderer.renderFrontDynamic(0.0f, WOOFER.size(), WOOFER.x(), WOOFER.y(),
                                 baffleZ, clear, scratch, idleSink, light, overlay);
                         idleSink.emit(AtlasSprites.CUTOUT, AtlasSprites.white((pose, consumer) ->
-                                renderDeck(pose, consumer, volume, 0f, false, loopMode, shuffle, locked, light, overlay)));
+                                renderDeck(pose, consumer, volume, 0f, false, loopMode, shuffle, locked,
+                                        light, overlay)));
                         emitPipeStrip(0, pipeZ, idleSink, light, overlay);
                     });
             renderDeckGlow(0f, false, loopMode, shuffle, locked, poseStack, sink, overlay);
@@ -147,7 +148,7 @@ final class PartyBoxRenderer {
         poseStack.popPose();
     }
 
-    private static void renderStatic(com.nachtraben.soundstage.block.speaker.SpeakerFinish finish, boolean grille,
+    private static void renderStatic(SpeakerFinish finish, boolean grille,
                                      PoseStack poseStack, GeometrySink sink, int light, int overlay) {
         CabinetRenderer.render(SLAB, finish, grille, HOLES, poseStack, sink, light, overlay);
         if (!finish.isTransparent()) {
@@ -213,7 +214,6 @@ final class PartyBoxRenderer {
     }
 
     private static void renderPipeGlow(float fill, float z, PoseStack poseStack, GeometrySink sink, int overlay) {
-        if (RenderPreview.suppressBlendedPasses) return;
         int litPairs = litPairs(fill);
         if (litPairs == 0) return;
         PIPE_GLOW_MESH.renderBlended(new PipeGlowKey(litPairs, z, overlay), poseStack, sink,
@@ -243,10 +243,14 @@ final class PartyBoxRenderer {
             float[] a = pipePoint(Mth.lerp(t0, from, to));
             float[] b = pipePoint(Mth.lerp(t1, from, to));
             float outA = outerHalf(a, half), outB = outerHalf(b, half);
-            vertex(c, pose, a[0] - a[2] * half, a[1] - a[3] * half, z, rgb, 255, 0, 1 - t0, RenderLight.FULL_BRIGHT, overlay);
-            vertex(c, pose, b[0] - b[2] * half, b[1] - b[3] * half, z, rgb, 255, 0, 1 - t1, RenderLight.FULL_BRIGHT, overlay);
-            vertex(c, pose, b[0] + b[2] * outB, b[1] + b[3] * outB, z, rgb, 255, 1, 1 - t1, RenderLight.FULL_BRIGHT, overlay);
-            vertex(c, pose, a[0] + a[2] * outA, a[1] + a[3] * outA, z, rgb, 255, 1, 1 - t0, RenderLight.FULL_BRIGHT, overlay);
+            vertex(c, pose, a[0] - a[2] * half, a[1] - a[3] * half, z, rgb, 255, 0, 1 - t0,
+                    RenderLight.FULL_BRIGHT, overlay);
+            vertex(c, pose, b[0] - b[2] * half, b[1] - b[3] * half, z, rgb, 255, 0, 1 - t1,
+                    RenderLight.FULL_BRIGHT, overlay);
+            vertex(c, pose, b[0] + b[2] * outB, b[1] + b[3] * outB, z, rgb, 255, 1, 1 - t1,
+                    RenderLight.FULL_BRIGHT, overlay);
+            vertex(c, pose, a[0] + a[2] * outA, a[1] + a[3] * outA, z, rgb, 255, 1, 1 - t0,
+                    RenderLight.FULL_BRIGHT, overlay);
         }
     }
 
@@ -329,7 +333,6 @@ final class PartyBoxRenderer {
 
     private static void renderDeckGlow(float level, boolean playing, int loopMode, boolean shuffle,
                                        boolean locked, PoseStack poseStack, GeometrySink sink, int overlay) {
-        if (RenderPreview.suppressBlendedPasses) return;
         int lit = meterLit(level);
         boolean loopLit = loopMode != 0;
         if (!loopLit && !shuffle && lit == 0 && !playing && !locked) return;
@@ -456,7 +459,7 @@ final class PartyBoxRenderer {
                     at(x), at(top), at(z),
                     0x34373C, 255, 0, 1, 0, light, overlay);
         }
-        float[] sweep = com.nachtraben.soundstage.core.KnobSweep.direction(value);
+        float[] sweep = KnobSweep.direction(value);
         float dx = -sweep[0], dz = sweep[1];
         float px = -dz * 0.14f, pz = dx * 0.14f;
         float r0 = radius * 0.2f, r1 = radius * 0.9f, y = top + 0.01f;

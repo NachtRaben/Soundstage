@@ -4,13 +4,15 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.nachtraben.soundstage.SoundstageInit;
+import com.nachtraben.soundstage.block.IAudioReceiver;
 import com.nachtraben.soundstage.block.ReceiverBlock;
 import com.nachtraben.soundstage.block.ReceiverBlockEntity;
+import com.nachtraben.soundstage.block.speaker.SpeakerFinish;
 import com.nachtraben.soundstage.client.audio.AudioDecoder;
 import com.nachtraben.soundstage.client.audio.ClientAudioReceiver;
+import com.nachtraben.soundstage.core.KnobSweep;
 import com.nachtraben.soundstage.core.TubeThermalModel;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.resources.ResourceLocation;
@@ -19,7 +21,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.NotNull;
 
 //? if >=1.21.11 {
-/*public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<ReceiverBlockEntity, BlockEntityState<ReceiverBlockEntity>> {
+/*public class ReceiverBlockEntityRenderer
+        implements BlockEntityRenderer<ReceiverBlockEntity, BlockEntityState<ReceiverBlockEntity>> {
 *///?} else {
 public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<ReceiverBlockEntity> {
 //?}
@@ -125,9 +128,10 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
     }
 
     @Override
-    public void extractRenderState(ReceiverBlockEntity blockEntity, BlockEntityState<ReceiverBlockEntity> state, float partialTick,
-                                   net.minecraft.world.phys.Vec3 camera,
-                                   net.minecraft.client.renderer.feature.ModelFeatureRenderer.@org.jetbrains.annotations.Nullable CrumblingOverlay breaking) {
+    public void extractRenderState(ReceiverBlockEntity blockEntity, BlockEntityState<ReceiverBlockEntity> state,
+            float partialTick, net.minecraft.world.phys.Vec3 camera,
+            net.minecraft.client.renderer.feature.ModelFeatureRenderer.@org.jetbrains.annotations.Nullable
+                    CrumblingOverlay breaking) {
         BlockEntityRenderer.super.extractRenderState(blockEntity, state, partialTick, camera, breaking);
         state.blockEntity = blockEntity;
         state.partialTick = partialTick;
@@ -138,18 +142,20 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
                        net.minecraft.client.renderer.SubmitNodeCollector collector,
                        net.minecraft.client.renderer.state.CameraRenderState camera) {
         if (state.blockEntity == null) return;
-        draw(state.blockEntity, state.partialTick, poseStack, GeometrySinks.submit(poseStack, collector), state.lightCoords,
-                net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, null);
+        draw(state.blockEntity, state.partialTick, poseStack, GeometrySinks.submit(poseStack, collector),
+                state.lightCoords, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, null);
     }
     *///?} else {
     @Override
     public void render(ReceiverBlockEntity blockEntity, float partialTick, @NotNull PoseStack poseStack,
-                       net.minecraft.client.renderer.MultiBufferSource bufferSource, int packedLight, int packedOverlay) {
-        draw(blockEntity, partialTick, poseStack, GeometrySinks.immediate(poseStack, bufferSource), packedLight, packedOverlay, bufferSource);
+                       net.minecraft.client.renderer.MultiBufferSource bufferSource, int packedLight,
+                       int packedOverlay) {
+        draw(blockEntity, partialTick, poseStack, GeometrySinks.immediate(poseStack, bufferSource), packedLight,
+                packedOverlay, bufferSource);
     }
     //?}
 
-    private record ReceiverStaticKey(com.nachtraben.soundstage.block.speaker.SpeakerFinish finish,
+    private record ReceiverStaticKey(SpeakerFinish finish,
                                      int light, int overlay) {}
 
     private static final StaticMesh GLASS_MESH = new StaticMesh(8);
@@ -166,16 +172,12 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
 
     private static GlowKey lastGlowKey = new GlowKey(0);
 
-    private static boolean glowSubmittedLive() {
-        return com.nachtraben.soundstage.RigStaging.fault("blended-unordered");
-    }
-
     private static GlowKey glowKey(int overlay) {
         if (lastGlowKey.overlay() != overlay) lastGlowKey = new GlowKey(overlay);
         return lastGlowKey;
     }
 
-    private static void renderReceiverStatic(com.nachtraben.soundstage.block.speaker.SpeakerFinish finish,
+    private static void renderReceiverStatic(SpeakerFinish finish,
                                              GeometrySink sink, int light, int overlay) {
         if (!finish.isTransparent()) {
             renderCheeks(finish, sink, light, overlay);
@@ -184,13 +186,14 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
                 AmplifierChassisRenderer.render(pose, consumer, light, overlay)));
     }
 
-    private static void renderCheeks(com.nachtraben.soundstage.block.speaker.SpeakerFinish finish,
+    private static void renderCheeks(SpeakerFinish finish,
                                      GeometrySink sink, int light, int overlay) {
         CabinetRenderer.renderWoodBox(finish, 0f, 0f, 1f, 1f, 6.8f, 15f, sink, light, overlay);
         CabinetRenderer.renderWoodBox(finish, 15f, 0f, 1f, 16f, 6.8f, 15f, sink, light, overlay);
     }
 
-    void drawItem(ReceiverBlockEntity blockEntity, PoseStack poseStack, GeometrySink sink, int packedLight, int packedOverlay) {
+    void drawItem(ReceiverBlockEntity blockEntity, PoseStack poseStack, GeometrySink sink, int packedLight,
+                  int packedOverlay) {
         draw(blockEntity, 0f, poseStack, sink, packedLight, packedOverlay, null);
     }
 
@@ -237,7 +240,7 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
         final boolean signal = receiverRef != null && !receiverRef.ring.isEmpty();
         PANEL_MESH.render(new PanelKey(blockEntity.isPlaying(), blockEntity.getLoopMode(),
                         blockEntity.isShuffle(), blockEntity.isLocked(), signal,
-                        shownVolume(blockEntity), packedLight, packedOverlay),
+                        blockEntity.getVolume(), packedLight, packedOverlay),
                 poseStack, sink, (scratch, panelSink) ->
                         panelSink.emit(AtlasSprites.CUTOUT, AtlasSprites.white((pose, consumer) ->
                                 renderPanel(pose, consumer, blockEntity, signal, packedLight, packedOverlay))));
@@ -247,15 +250,12 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
             renderNeedle(pose, consumer, RIGHT_METER_X, rightLevel, packedLight, packedOverlay);
         }));
 
-        boolean blended = !RenderPreview.suppressBlendedPasses;
-        boolean glassFirst = blended && glassUnderLight();
+        boolean glassFirst = glassUnderLight();
         if (glassFirst) renderTubeGlass(poseStack, sink, packedLight, packedOverlay);
-        if (blended) {
-            renderIndicatorGlow(poseStack, sink, blockEntity, receiverRef != null && !receiverRef.ring.isEmpty(),
-                    packedOverlay);
-            renderMeterBacklight(poseStack, sink, packedOverlay);
-            renderTubeGlow(poseStack, sink, receiver, baseYaw, packedOverlay);
-        }
+        renderIndicatorGlow(poseStack, sink, blockEntity, receiverRef != null && !receiverRef.ring.isEmpty(),
+                packedOverlay);
+        renderMeterBacklight(poseStack, sink, packedOverlay);
+        renderTubeGlow(poseStack, sink, receiver, baseYaw, packedOverlay);
 
         //? if <1.21.11 {
         if (bufferSource instanceof net.minecraft.client.renderer.MultiBufferSource.BufferSource batched) {
@@ -265,7 +265,7 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
         }
         //?}
 
-        if (blended && !glassFirst) {
+        if (!glassFirst) {
             renderTubeGlass(poseStack, sink, packedLight, packedOverlay);
         }
 
@@ -289,7 +289,7 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
         renderButton(pose, consumer, 3, blockEntity.isLocked(), packedLight, packedOverlay);
         renderSignalLamp(pose, consumer, signal, packedLight, packedOverlay);
         renderVolumeKnob(pose, consumer,
-                shownVolume(blockEntity) / (float) com.nachtraben.soundstage.block.IAudioReceiver.MAX_VOLUME,
+                blockEntity.getVolume() / (float) IAudioReceiver.MAX_VOLUME,
                 packedLight, packedOverlay);
     }
 
@@ -316,7 +316,7 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
         Mesh.emitOffsetDisc(pose, consumer, cx, cy, r, KNOB_FRONT_Z, 0x35383D, -1, light, overlay);
         Mesh.emitOffsetDisc(pose, consumer, cx, cy, r * 0.72f, KNOB_FRONT_Z - 0.002f, 0x2A2C30, -1, light, overlay);
 
-        float[] sweep = com.nachtraben.soundstage.core.KnobSweep.direction(volume);
+        float[] sweep = KnobSweep.direction(volume);
         float dirX = sweep[0], dirY = -sweep[1];
         float x0 = faceX(KNOB_X_PX + dirX * KNOB_RADIUS_PX * 0.25f);
         float y0 = faceY(KNOB_Y_PX + dirY * KNOB_RADIUS_PX * 0.25f);
@@ -378,13 +378,14 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
 
         float ledX = (xa + xb) / 2f, ledY = yb - pxLength(2.2f), ledHalfX = pxLength(1.6f), ledHalfY = pxLength(0.8f);
         int led = pressed ? 0x6CFF7A : 0x24402A;
-        Mesh.emitQuad(pose, consumer, ledX - ledHalfX, ledY - ledHalfY, front - 0.002f, ledX - ledHalfX, ledY + ledHalfY, front - 0.002f,
+        Mesh.emitQuad(pose, consumer, ledX - ledHalfX, ledY - ledHalfY, front - 0.002f, ledX - ledHalfX,
+                ledY + ledHalfY, front - 0.002f,
                 ledX + ledHalfX, ledY + ledHalfY, front - 0.002f, ledX + ledHalfX, ledY - ledHalfY, front - 0.002f,
                 led, 255, 0, 0, -1, pressed ? 0x00F000F0 : packedLight, packedOverlay);
     }
 
     private void renderIndicatorGlow(PoseStack poseStack, GeometrySink sink,
-                                     com.nachtraben.soundstage.block.ReceiverBlockEntity blockEntity,
+                                     ReceiverBlockEntity blockEntity,
                                      boolean signal, int packedOverlay) {
         boolean[] latched = {blockEntity.isPlaying(), blockEntity.getLoopMode() != 0,
                 blockEntity.isShuffle(), blockEntity.isLocked()};
@@ -402,8 +403,8 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
                             0x4C, 0xC8, 0x58, 255, light, packedOverlay));
             poseStack.popPose();
         }
-        float[] sweep = com.nachtraben.soundstage.core.KnobSweep.direction(
-                shownVolume(blockEntity) / (float) com.nachtraben.soundstage.block.IAudioReceiver.MAX_VOLUME);
+        float[] sweep = KnobSweep.direction(
+                blockEntity.getVolume() / (float) IAudioReceiver.MAX_VOLUME);
         float stripeX = faceX(KNOB_X_PX + sweep[0] * KNOB_RADIUS_PX * 0.6f);
         float stripeY = faceY(KNOB_Y_PX - sweep[1] * KNOB_RADIUS_PX * 0.6f);
         poseStack.pushPose();
@@ -447,7 +448,8 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
         float cx = faceX(BUTTON_FIRST_X_PX + 4 * BUTTON_PITCH_PX + BUTTON_W_PX / 2f);
         float cy = faceY(BUTTON_TOP_PX + BUTTON_H_PX / 2f);
         float lensFront = FACE_Z - units(0.25f);
-        Mesh.emitOffsetDisc(pose, consumer, cx, cy, pxLength(5.2f), FACE_Z - 0.001f, 0x121314, -1, packedLight, packedOverlay);
+        Mesh.emitOffsetDisc(pose, consumer, cx, cy, pxLength(5.2f), FACE_Z - 0.001f, 0x121314, -1, packedLight,
+                packedOverlay);
         Mesh.emitOffsetCylinderShell(pose, consumer, cx, cy, pxLength(3.6f), lensFront, FACE_Z,
                 0x2A2B2D, packedLight, packedOverlay);
         int lens = signal ? 0xFFB347 : 0x4A3A26;
@@ -468,12 +470,7 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
             glow = Mth.clamp(receiver.tubeGlow(), 0f, 1f);
             redness = Mth.clamp(receiver.tubeRedness(), 0f, 1f);
         }
-        Float preview = RenderPreview.tubeGlow;
-        if (preview != null) {
-            glow = Mth.clamp(preview, 0f, 1f);
-            redness = Mth.clamp((glow - 0.6f) / 0.4f, 0f, 1f);
-        }
-        if (glow <= 0f || com.nachtraben.soundstage.RigStaging.fault("tube-glow-withheld")) return;
+        if (glow <= 0f) return;
 
         int r = (int) Mth.lerp(redness, GLOW_WARM_R, GLOW_HOT_R);
         int g = (int) Mth.lerp(redness, GLOW_WARM_G, GLOW_HOT_G);
@@ -495,14 +492,9 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
             poseStack.translate(at(centerX), at(POOL_HEIGHT), at(TUBE_CENTER_Z));
             poseStack.mulPose(Axis.XP.rotationDegrees(90f));
             int pr = scale(r, pool), pg = scale(g, pool), pb = scale(b, pool);
-            if (glowSubmittedLive()) {
-                sink.emit(SoundstageRenderTypes.eyes(HALO_TEXTURE), (pose, poolBuffer) ->
-                        quad(pose, poolBuffer, poolHalf, poolHalf, pr, pg, pb, 255, light, packedOverlay));
-            } else {
-                POOL_MESH.renderBlended(glowKey(packedOverlay), pr / 255f, pg / 255f, pb / 255f, poseStack, sink,
-                        (scratch, poolSink) -> poolSink.emit(SoundstageRenderTypes.eyes(HALO_TEXTURE), (pose, poolBuffer) ->
-                                quad(pose, poolBuffer, poolHalf, poolHalf, 255, 255, 255, 255, light, packedOverlay)));
-            }
+            POOL_MESH.renderBlended(glowKey(packedOverlay), pr / 255f, pg / 255f, pb / 255f, poseStack, sink,
+                    (scratch, poolSink) -> poolSink.emit(SoundstageRenderTypes.eyes(HALO_TEXTURE), (pose, poolBuffer) ->
+                            quad(pose, poolBuffer, poolHalf, poolHalf, 255, 255, 255, 255, light, packedOverlay)));
             poseStack.popPose();
         }
 
@@ -512,7 +504,6 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
         *///?} else {
         var camera = net.minecraft.client.Minecraft.getInstance().getEntityRenderDispatcher().cameraOrientation();
         //?}
-        if (RenderPreview.suppressTubeHalo) return;
         for (float centerX : TUBE_CENTERS_X) {
             poseStack.pushPose();
             poseStack.translate(at(centerX), at(HALO_CENTER_Y), at(TUBE_CENTER_Z));
@@ -522,16 +513,10 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
             /*poseStack.mulPose(Axis.YP.rotationDegrees(180f));
             *///?}
             int hr = scale(r, halo), hg = scale(g, halo), hb = scale(b, halo);
-            if (glowSubmittedLive()) {
-                sink.emit(SoundstageRenderTypes.eyes(HALO_TEXTURE), (pose, haloBuffer) ->
-                        quad(pose, haloBuffer, units(HALO_HALF_WIDTH), units(HALO_HALF_HEIGHT),
-                                hr, hg, hb, 255, light, packedOverlay));
-            } else {
-                HALO_MESH.renderBlended(glowKey(packedOverlay), hr / 255f, hg / 255f, hb / 255f, poseStack, sink,
-                        (scratch, haloSink) -> haloSink.emit(SoundstageRenderTypes.eyes(HALO_TEXTURE), (pose, haloBuffer) ->
-                                quad(pose, haloBuffer, units(HALO_HALF_WIDTH), units(HALO_HALF_HEIGHT),
-                                        255, 255, 255, 255, light, packedOverlay)));
-            }
+            HALO_MESH.renderBlended(glowKey(packedOverlay), hr / 255f, hg / 255f, hb / 255f, poseStack, sink,
+                    (scratch, haloSink) -> haloSink.emit(SoundstageRenderTypes.eyes(HALO_TEXTURE), (pose, haloBuffer) ->
+                            quad(pose, haloBuffer, units(HALO_HALF_WIDTH), units(HALO_HALF_HEIGHT),
+                                    255, 255, 255, 255, light, packedOverlay)));
             poseStack.popPose();
         }
     }
@@ -586,9 +571,5 @@ public class ReceiverBlockEntityRenderer implements BlockEntityRenderer<Receiver
                 .setLight(packedLight)
                 ;
                 Mesh.applyNormal(consumer, pose, 0, 0, -1);
-    }
-
-    private static int shownVolume(com.nachtraben.soundstage.block.ReceiverBlockEntity blockEntity) {
-        return com.nachtraben.soundstage.RigStaging.fault("volume-unread") ? 50 : blockEntity.getVolume();
     }
 }

@@ -1,9 +1,14 @@
 package com.nachtraben.soundstage.audio.video;
 
+import com.nachtraben.soundstage.core.video.CueTrack;
+import com.nachtraben.soundstage.core.video.SurroundBuffer;
+import com.nachtraben.soundstage.core.video.VideoAccessUnit;
+import org.jetbrains.annotations.Nullable;
+
 public interface VideoSink {
     void begin(int generation, long startMillis);
 
-    void accept(int generation, long ptsMillis, com.nachtraben.soundstage.core.video.VideoAccessUnit unit);
+    void accept(int generation, long ptsMillis, VideoAccessUnit unit);
 
     void end(int generation);
 
@@ -18,14 +23,28 @@ public interface VideoSink {
         return true;
     }
 
-    default com.nachtraben.soundstage.core.video.SurroundBuffer surround() {
+    default boolean takePicturePlace() {
+        return true;
+    }
+
+    default void releasePicturePlace() {
+    }
+
+    default int rememberedStep() {
+        return 0;
+    }
+
+    default void stepped(int height) {
+    }
+
+    default SurroundBuffer surround() {
         return null;
     }
 
-    default void subtitles(com.nachtraben.soundstage.core.video.CueTrack cues) {
+    default void subtitles(CueTrack cues) {
     }
 
-    default @org.jetbrains.annotations.Nullable String playerLanguage() {
+    default @Nullable String playerLanguage() {
         return null;
     }
 

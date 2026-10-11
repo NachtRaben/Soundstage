@@ -21,7 +21,8 @@ public class OAuthScreen extends UiScreen {
     private Component status = Component.empty();
 
     public OAuthScreen(String url, String code) {
-        super(Component.translatable("gui.soundstage.oauth.title"), UiIcon.LOCK, THEME, null, WINDOW_WIDTH, WINDOW_HEIGHT);
+        super(Component.translatable("gui.soundstage.oauth.title"), UiIcon.LOCK, THEME, null, WINDOW_WIDTH,
+                WINDOW_HEIGHT);
         this.url = url;
         this.code = code;
     }
@@ -31,7 +32,8 @@ public class OAuthScreen extends UiScreen {
         int buttonY = panelY() + WINDOW_HEIGHT - 28;
         Component open = Component.translatable("gui.soundstage.oauth.open_browser");
         int openWidth = UiButton.widthFor(open, false, 0, 10);
-        addRenderableWidget(new UiButton(THEME, right() - openWidth, buttonY, openWidth, 18, UiButton.Look.PRIMARY, () -> {
+        addRenderableWidget(
+                new UiButton(THEME, right() - openWidth, buttonY, openWidth, 18, UiButton.Look.PRIMARY, () -> {
             //? if >=26.3 {
             /*com.mojang.blaze3d.Blaze3D.openUri(java.net.URI.create(this.url));
             *///?} else {
@@ -41,7 +43,8 @@ public class OAuthScreen extends UiScreen {
         }).label(open));
         Component copy = Component.translatable("gui.soundstage.oauth.copy_code");
         int copyWidth = UiButton.widthFor(copy, false, 0, 10);
-        addRenderableWidget(new UiButton(THEME, right() - openWidth - 6 - copyWidth, buttonY, copyWidth, 18, UiButton.Look.PILL, () -> {
+        addRenderableWidget(new UiButton(THEME, right() - openWidth - 6 - copyWidth, buttonY, copyWidth, 18,
+                UiButton.Look.PILL, () -> {
             Minecraft.getInstance().keyboardHandler.setClipboard(this.code);
             status = Component.translatable("gui.soundstage.oauth.copied");
         }).label(copy));
@@ -54,7 +57,8 @@ public class OAuthScreen extends UiScreen {
 
         g.text(this.font, Component.translatable("gui.soundstage.oauth.url"), left(), y + 18, THEME.text());
         UiDraw.roundRect(g, left(), y + 29, right() - left(), 18, 4, THEME.surface());
-        g.text(this.font, UiText.ellipsize(this.font, this.url, right() - left() - 12), left() + 6, y + 34, THEME.accent());
+        g.text(this.font, UiText.ellipsize(this.font, this.url, right() - left() - 12), left() + 6, y + 34,
+                THEME.accent());
 
         g.text(this.font, Component.translatable("gui.soundstage.oauth.code"), left(), y + 56, THEME.text());
         UiDraw.roundRect(g, left(), y + 67, right() - left(), 26, 5, THEME.warm());

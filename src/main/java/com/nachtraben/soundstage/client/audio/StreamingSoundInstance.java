@@ -1,30 +1,37 @@
 package com.nachtraben.soundstage.client.audio;
 
-import com.nachtraben.soundstage.core.ChannelDownmix;
-import com.nachtraben.soundstage.core.SpeakerAcoustics;
-import com.nachtraben.soundstage.core.LevelMeterModel;
-import com.nachtraben.soundstage.core.ConeExcursionModel;
-import com.nachtraben.soundstage.core.AudioDSP;
-import com.nachtraben.soundstage.core.StreamRenderGate;
 import com.nachtraben.soundstage.SoundstageInit;
-import lombok.Getter;
+import com.nachtraben.soundstage.block.speaker.AbstractSpeakerBlock;
+import com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity;
+import com.nachtraben.soundstage.core.AudioDSP;
+import com.nachtraben.soundstage.core.ChannelMode;
+import com.nachtraben.soundstage.core.SpeakerAcoustics;
+import com.nachtraben.soundstage.core.StreamRenderGate;
 import dev.armadeus.armalib.audio.client.StreamSoundInstance;
+import lombok.Getter;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.Sound;
 import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.client.sounds.AudioStream;
 import net.minecraft.client.sounds.SoundBufferLibrary;
-import net.minecraft.client.sounds.WeighedSoundEvents;
 import net.minecraft.client.sounds.SoundManager;
+import net.minecraft.client.sounds.WeighedSoundEvents;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.valueproviders.ConstantFloat;
-
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Supplier;
-
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.LoggerFactory;
+
+import java.lang.reflect.Method;
+import java.nio.ShortBuffer;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 public class StreamingSoundInstance extends StreamSoundInstance {
 
@@ -34,15 +41,15 @@ public class StreamingSoundInstance extends StreamSoundInstance {
     private final BlockPos receiverPos;
     private final AudioDSP dsp;
 
-    private static final java.lang.reflect.Method BRIDGE_FACTORY = resolveBridgeFactory();
+    private static final Method BRIDGE_FACTORY = resolveBridgeFactory();
 
-    private static java.lang.reflect.Method resolveBridgeFactory() {
+    private static Method resolveBridgeFactory() {
         try {
             Class<?> bridge = Class.forName(
                     "com.nachtraben.soundstage.client.audio.resonance.ResonanceStreamingSoundInstance");
             return bridge.getMethod("create", BlockPos.class, ClientAudioReceiver.class, SpeakerAcoustics.class);
         } catch (LinkageError | ReflectiveOperationException e) {
-            org.slf4j.LoggerFactory.getLogger("Soundstage").info(
+            LoggerFactory.getLogger("Soundstage").info(
                     "Resonance's directional-sound bridge is unavailable ({}); "
                             + "speakers will play without directional sound", e.toString());
             return null;
@@ -51,12 +58,12 @@ public class StreamingSoundInstance extends StreamSoundInstance {
 
     public static StreamingSoundInstance create(BlockPos pos, ClientAudioReceiver receiver,
                                                 SpeakerAcoustics initialAcoustics) {
-        java.lang.reflect.Method factory = BRIDGE_FACTORY;
+        Method factory = BRIDGE_FACTORY;
         if (factory != null) {
             try {
                 return (StreamingSoundInstance) factory.invoke(null, pos, receiver, initialAcoustics);
             } catch (LinkageError | ReflectiveOperationException e) {
-                org.slf4j.LoggerFactory.getLogger("Soundstage").warn(
+                LoggerFactory.getLogger("Soundstage").warn(
                         "Resonance's directional-sound bridge failed to build a stream; "
                                 + "falling back to a plain stream", e);
             }
@@ -72,7 +79,9 @@ public class StreamingSoundInstance extends StreamSoundInstance {
     }
 
     protected StreamingSoundInstance(BlockPos pos, BlockPos receiverPos) {
-        super(SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID, "live_stream_" + pos.getX() + "_" + pos.getY() + "_" + pos.getZ())), SoundSource.RECORDS, SoundInstance.createUnseededRandom());
+        super(SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(SoundstageInit.MODID,
+                "live_stream_" + pos.getX() + "_" + pos.getY() + "_" + pos.getZ())), SoundSource.RECORDS,
+                SoundInstance.createUnseededRandom());
         this.pos = pos;
         this.receiverPos = receiverPos;
         this.x = pos.getX() + 0.5;
@@ -82,12 +91,6 @@ public class StreamingSoundInstance extends StreamSoundInstance {
         this.delay = 0;
         this.volume = 1.0f;
         this.attenuation = SoundInstance.Attenuation.LINEAR;
-        if (com.nachtraben.soundstage.RigStaging.fault("sound-at-listener")) {
-            this.relative = true;
-            this.x = 0;
-            this.y = 0;
-            this.z = 0;
-        }
 
         this.dsp = new AudioDSP(AudioDSP.FilterType.NONE, 48000f, 1000f, 0.707f);
     }
@@ -102,18 +105,18 @@ public class StreamingSoundInstance extends StreamSoundInstance {
     }
 
     private int currentRange() {
-        if (net.minecraft.client.Minecraft.getInstance().level != null) {
-            net.minecraft.world.level.block.entity.BlockEntity be =
-                    net.minecraft.client.Minecraft.getInstance().level.getBlockEntity(pos);
-            if (be instanceof com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity speaker) {
+        if (Minecraft.getInstance().level != null) {
+            BlockEntity be =
+                    Minecraft.getInstance().level.getBlockEntity(pos);
+            if (be instanceof SpeakerBlockEntity speaker) {
                 return speaker.getRange();
             }
         }
-        return com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity.DEFAULT_RANGE;
+        return SpeakerBlockEntity.DEFAULT_RANGE;
     }
 
     private volatile int resolvedRange =
-            com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity.DEFAULT_RANGE;
+            SpeakerBlockEntity.DEFAULT_RANGE;
 
     @Override
     public @NotNull WeighedSoundEvents resolve(@NotNull SoundManager soundManager) {
@@ -133,7 +136,7 @@ public class StreamingSoundInstance extends StreamSoundInstance {
             false,
             resolvedRange
         );
-        
+
         WeighedSoundEvents events = new WeighedSoundEvents(soundLoc, null);
         events.addSound(this.sound);
         return events;
@@ -161,7 +164,8 @@ public class StreamingSoundInstance extends StreamSoundInstance {
     private volatile GroupStartClock groupStart = null;
 
     @Override
-    protected @NotNull CompletableFuture<AudioStream> openStream(@NotNull SoundBufferLibrary soundBuffers, @NotNull Sound sound, boolean looping) {
+    protected @NotNull CompletableFuture<AudioStream> openStream(@NotNull SoundBufferLibrary soundBuffers,
+            @NotNull Sound sound, boolean looping) {
         isPendingStart = false;
         channelOpen = true;
         jitterStream = new JitterAudioStream(this);
@@ -184,8 +188,8 @@ public class StreamingSoundInstance extends StreamSoundInstance {
     private volatile SpeakerAcoustics acoustics = SpeakerAcoustics.MAIN;
 
     @Getter
-    private volatile com.nachtraben.soundstage.core.ChannelMode channelMode =
-            com.nachtraben.soundstage.core.ChannelMode.MONO;
+    private volatile ChannelMode channelMode =
+            ChannelMode.MONO;
 
     @Getter
     private volatile int delayFrames = 0;
@@ -230,7 +234,7 @@ public class StreamingSoundInstance extends StreamSoundInstance {
         if (receiver != null) receiver.releaseAnimation(animationKey());
     }
 
-    void traceFrame(long sequence, java.nio.ShortBuffer mono, float sampleRate) {
+    void traceFrame(long sequence, ShortBuffer mono, float sampleRate) {
         animation().trace(sequence, mono, sampleRate);
     }
 
@@ -288,7 +292,7 @@ public class StreamingSoundInstance extends StreamSoundInstance {
     }
 
     private void resolveAcoustics() {
-        if (resolvedBlockType || net.minecraft.client.Minecraft.getInstance().level == null) {
+        if (resolvedBlockType || Minecraft.getInstance().level == null) {
             return;
         }
 
@@ -296,13 +300,13 @@ public class StreamingSoundInstance extends StreamSoundInstance {
             return;
         }
 
-        net.minecraft.world.level.block.state.BlockState state =
-                net.minecraft.client.Minecraft.getInstance().level.getBlockState(pos);
+        BlockState state =
+                Minecraft.getInstance().level.getBlockState(pos);
         if (state.isAir()) {
             return;
         }
 
-        String path = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
+        String path = BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
         this.acoustics = SpeakerAcoustics.forBlockPath(path);
         this.dsp.setType(acoustics.getFilterType(), acoustics.getFilterFrequency(), 0.707f);
         this.resolvedBlockType = true;
@@ -339,8 +343,8 @@ public class StreamingSoundInstance extends StreamSoundInstance {
     private final Object filterAuditLock = new Object();
     private final int[] framesBeforeBlockTruth = new int[SpeakerAcoustics.values().length];
 
-    private final java.util.concurrent.atomic.AtomicInteger wrongFilterFrames =
-            new java.util.concurrent.atomic.AtomicInteger();
+    private final AtomicInteger wrongFilterFrames =
+            new AtomicInteger();
 
     public int getWrongFilterFrames() { return wrongFilterFrames.get(); }
 
@@ -365,18 +369,18 @@ public class StreamingSoundInstance extends StreamSoundInstance {
         return dsp;
     }
 
-    private final java.util.concurrent.atomic.AtomicInteger unfilteredFrames =
-            new java.util.concurrent.atomic.AtomicInteger();
+    private final AtomicInteger unfilteredFrames =
+            new AtomicInteger();
 
     public int getUnfilteredFrames() { return unfilteredFrames.get(); }
 
     @Override
     public void tick() {
-        if (net.minecraft.client.Minecraft.getInstance().level == null) {
+        if (Minecraft.getInstance().level == null) {
             return;
         }
-        net.minecraft.world.level.block.state.BlockState state =
-                net.minecraft.client.Minecraft.getInstance().level.getBlockState(pos);
+        BlockState state =
+                Minecraft.getInstance().level.getBlockState(pos);
 
         if (blockTruth == null && !state.isAir()) {
             SpeakerAcoustics observed = SpeakerAcoustics.forBlockPath(net.minecraft.core.registries
@@ -404,29 +408,21 @@ public class StreamingSoundInstance extends StreamSoundInstance {
 
         resolveAcoustics();
 
-        net.minecraft.world.level.block.entity.BlockEntity be =
-                net.minecraft.client.Minecraft.getInstance().level.getBlockEntity(pos);
-        if (!(be instanceof com.nachtraben.soundstage.block.speaker.SpeakerBlockEntity speaker)) {
+        BlockEntity be =
+                Minecraft.getInstance().level.getBlockEntity(pos);
+        if (!(be instanceof SpeakerBlockEntity speaker)) {
             return;
         }
 
         this.channelMode = speaker.getChannelMode();
-        int wantedDelay = speaker.getDelayFrames()
-                + (com.nachtraben.soundstage.RigStaging.fault("client-start-delay") ? 25 : 0)
-                + (com.nachtraben.soundstage.RigStaging.fault("client-drift")
-                        && (System.nanoTime() / 2_000_000_000L) % 2 == 0 ? 15 : 0);
-        if (com.nachtraben.soundstage.RigStaging.fault("delay-not-mirrored")
-                || (wantedDelay < this.delayFrames && com.nachtraben.soundstage.RigStaging.fault("lowering-not-mirrored"))) {
-            wantedDelay = this.delayFrames;
-        }
-        this.delayFrames = wantedDelay;
+        this.delayFrames = speaker.getDelayFrames();
         this.volumePercent = speaker.getVolumePercent();
 
         if (speaker.getRange() != resolvedRange) {
             this.needsRestart = true;
         }
 
-        int rotation16 = state.getValue(com.nachtraben.soundstage.block.speaker.AbstractSpeakerBlock.ROTATION);
+        int rotation16 = state.getValue(AbstractSpeakerBlock.ROTATION);
         float baseYaw = rotation16 * 360f / 16f;
         float yaw = baseYaw - speaker.getYawOffset();
         float pitch = speaker.getPitch();
